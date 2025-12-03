@@ -16,6 +16,7 @@ export interface QuizQuestion {
   options: string[];
   correctAnswerIndex: number;
   explanation: string;
+  hint?: string; // Optional hint for the user
 }
 
 export enum AppView {

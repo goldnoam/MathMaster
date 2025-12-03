@@ -7,7 +7,7 @@ import QuizView from './components/QuizView.tsx';
 import LoadingSpinner from './components/LoadingSpinner.tsx';
 import Footer from './components/Footer.tsx';
 import { GradeLevel, Topic, AppView, QuizQuestion, Difficulty } from './types.ts';
-import { generateLessonContent, generateQuizContent } from './services/geminiService.ts';
+import { getLessonContent, getQuizContent } from './services/contentService.ts';
 
 const App: React.FC = () => {
   // Theme State - Initialize from LocalStorage
@@ -19,10 +19,9 @@ const App: React.FC = () => {
     return 'dark';
   });
   
-  // Online State
+  // Online State (Logic kept for UI indication, but core is now offline)
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
 
-  // Apply theme to HTML element and save to storage
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -32,7 +31,6 @@ const App: React.FC = () => {
     localStorage.setItem('mathmaster_theme', theme);
   }, [theme]);
 
-  // Monitor Online Status
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -57,6 +55,7 @@ const App: React.FC = () => {
   
   // Data State
   const [lessonContent, setLessonContent] = useState<string>('');
+  const [lessonKeywords, setLessonKeywords] = useState<Record<string, string>>({});
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   
   // UI State
@@ -75,20 +74,42 @@ const App: React.FC = () => {
     setSelectedTopic(topic);
     setSelectedDifficulty(difficulty);
     setIsLoading(true);
-    setLoadingMessage(`מכין שיעור בנושא ${topic.name} (רמה ${difficulty === 'easy' ? 'קלה' : difficulty === 'medium' ? 'בינונית' : 'קשה'})...`);
+    setLoadingMessage(`טוען שיעור בנושא ${topic.name}...`);
     
     try {
-      // 1. Generate Lesson
-      const content = await generateLessonContent(selectedGrade.name, topic.name, difficulty);
-      setLessonContent(content);
+      // Load Offline Content
+      const { markdown, keywords } = await getLessonContent(selectedGrade.id, topic.id, difficulty);
+      setLessonContent(markdown);
+      setLessonKeywords(keywords);
       setCurrentView(AppView.LESSON);
     } catch (error) {
       console.error(error);
-      alert("שגיאה: לא ניתן לטעון את השיעור. אנא בדוק את החיבור לרשת.");
+      alert("שגיאה בטעינת השיעור.");
     } finally {
       setIsLoading(false);
     }
   }, [selectedGrade]);
+
+  // Handler for search - sets grade and topic simultaneously
+  const handleDirectTopicSelect = useCallback(async (grade: GradeLevel, topic: Topic) => {
+    setSelectedGrade(grade);
+    setSelectedTopic(topic);
+    setSelectedDifficulty('medium'); // Default difficulty for search
+    setIsLoading(true);
+    setLoadingMessage(`טוען שיעור בנושא ${topic.name}...`);
+    
+    try {
+      const { markdown, keywords } = await getLessonContent(grade.id, topic.id, 'medium');
+      setLessonContent(markdown);
+      setLessonKeywords(keywords);
+      setCurrentView(AppView.LESSON);
+    } catch (error) {
+      console.error(error);
+      alert("שגיאה בטעינת השיעור.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const handleStartQuiz = useCallback(async () => {
     if (!selectedGrade || !selectedTopic) return;
@@ -97,28 +118,21 @@ const App: React.FC = () => {
     setLoadingMessage("מכין שאלות לתרגול...");
 
     try {
-      const questions = await generateQuizContent(selectedGrade.name, selectedTopic.name, selectedDifficulty);
-      if (questions.length > 0) {
-        setQuizQuestions(questions);
-        setCurrentView(AppView.QUIZ);
-      } else {
-         if (!isOnline) {
-             alert("מצב אופליין: לא נמצא שאלון שמור לנושא זה.");
-         } else {
-             alert("לא הצלחנו לייצר שאלות כרגע, אנא נסה שוב.");
-         }
-      }
+      const questions = await getQuizContent(selectedGrade.id, selectedTopic.id, selectedDifficulty);
+      setQuizQuestions(questions);
+      setCurrentView(AppView.QUIZ);
     } catch (error) {
       console.error(error);
+      alert("לא ניתן לטעון את השאלון.");
     } finally {
       setIsLoading(false);
     }
-  }, [selectedGrade, selectedTopic, selectedDifficulty, isOnline]);
+  }, [selectedGrade, selectedTopic, selectedDifficulty]);
 
   const handleQuizComplete = (score: number) => {
-    setPoints(prev => prev + (score * 10) + 5); // 10 points per right answer + 5 completion bonus
-    alert(`סיימת את התרגול! צברת ${score} תשובות נכונות.`);
-    setCurrentView(AppView.TOPICS); // Go back to topics after quiz
+    setPoints(prev => prev + (score * 10) + 5); 
+    // Alert removed as QuizView now handles the summary screen
+    setCurrentView(AppView.TOPICS);
   };
 
   const handleBackToGrades = () => {
@@ -159,7 +173,10 @@ const App: React.FC = () => {
         ) : (
           <>
             {currentView === AppView.HOME && (
-              <GradeSelector onSelectGrade={handleGradeSelect} />
+              <GradeSelector 
+                onSelectGrade={handleGradeSelect} 
+                onSelectDirectTopic={handleDirectTopicSelect} 
+              />
             )}
 
             {currentView === AppView.TOPICS && selectedGrade && (
@@ -173,6 +190,7 @@ const App: React.FC = () => {
             {currentView === AppView.LESSON && selectedTopic && (
               <LessonView 
                 content={lessonContent} 
+                keywords={lessonKeywords}
                 onStartQuiz={handleStartQuiz} 
                 onBack={handleBackToTopics} 
               />
@@ -189,7 +207,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Show global footer only if NOT in LessonView (because LessonView has fixed bottom bar) */}
       {currentView !== AppView.LESSON && <Footer />}
     </div>
   );
