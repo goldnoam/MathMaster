@@ -1,0 +1,5 @@
+{
+  "name": "MathMaster IL",
+  "description": "An AI-powered math tutor for grades 1-12 in Hebrew, featuring dynamic lessons and interactive quizzes.",
+  "requestFramePermissions": []
+}
