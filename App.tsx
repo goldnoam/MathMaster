@@ -1,28 +1,35 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
-import Navigation from './components/Navigation';
-import GradeSelector from './components/GradeSelector';
-import TopicSelector from './components/TopicSelector';
-import LessonView from './components/LessonView';
-import QuizView from './components/QuizView';
-import LoadingSpinner from './components/LoadingSpinner';
-import Footer from './components/Footer';
-import { GradeLevel, Topic, AppView, QuizQuestion, Difficulty } from './types';
-import { generateLessonContent, generateQuizContent } from './services/geminiService';
+import Navigation from './components/Navigation.tsx';
+import GradeSelector from './components/GradeSelector.tsx';
+import TopicSelector from './components/TopicSelector.tsx';
+import LessonView from './components/LessonView.tsx';
+import QuizView from './components/QuizView.tsx';
+import LoadingSpinner from './components/LoadingSpinner.tsx';
+import Footer from './components/Footer.tsx';
+import { GradeLevel, Topic, AppView, QuizQuestion, Difficulty } from './types.ts';
+import { generateLessonContent, generateQuizContent } from './services/geminiService.ts';
 
 const App: React.FC = () => {
-  // Theme State - Default to Dark
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  // Theme State - Initialize from LocalStorage
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('mathmaster_theme');
+      return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    }
+    return 'dark';
+  });
+  
   // Online State
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
 
-  // Apply theme to HTML element
+  // Apply theme to HTML element and save to storage
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+    localStorage.setItem('mathmaster_theme', theme);
   }, [theme]);
 
   // Monitor Online Status
@@ -182,7 +189,8 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <Footer />
+      {/* Show global footer only if NOT in LessonView (because LessonView has fixed bottom bar) */}
+      {currentView !== AppView.LESSON && <Footer />}
     </div>
   );
 };

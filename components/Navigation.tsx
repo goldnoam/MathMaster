@@ -1,7 +1,6 @@
-
 import React from 'react';
-import { AppView } from '../types';
-import Breadcrumbs from './Breadcrumbs';
+import { AppView } from '../types.ts';
+import Breadcrumbs from './Breadcrumbs.tsx';
 
 interface NavigationProps {
   currentView: AppView;

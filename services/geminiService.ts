@@ -1,7 +1,6 @@
-
 import { GoogleGenAI, Type } from '@google/genai';
-import { QuizQuestion, Difficulty } from '../types';
-import { loadFromCache, saveToCache } from './storageService';
+import { QuizQuestion, Difficulty } from '../types.ts';
+import { loadFromCache, saveToCache } from './storageService.ts';
 
 // Helper function to get AI instance safely
 const getAI = () => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GradeLevel, Topic, Difficulty, DIFFICULTY_LABELS } from '../types';
+import { GradeLevel, Topic, Difficulty, DIFFICULTY_LABELS } from '../types.ts';
 
 interface TopicSelectorProps {
   grade: GradeLevel;

@@ -1,6 +1,6 @@
 import React from 'react';
-import { GradeLevel } from '../types';
-import { CURRICULUM } from '../constants';
+import { GradeLevel } from '../types.ts';
+import { CURRICULUM } from '../constants.ts';
 
 interface GradeSelectorProps {
   onSelectGrade: (grade: GradeLevel) => void;

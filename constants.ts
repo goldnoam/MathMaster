@@ -1,4 +1,4 @@
-import { GradeLevel } from './types';
+import { GradeLevel } from './types.ts';
 
 // Icons are emoji for simplicity and performance
 export const CURRICULUM: GradeLevel[] = [
@@ -69,7 +69,7 @@ export const CURRICULUM: GradeLevel[] = [
     topics: [
       { id: 'g7-algebra-intro', name: 'משתנים וביטויים אלגבריים', icon: 'x' },
       { id: 'g7-signed-numbers', name: 'מספרים מכוונים', icon: '🌡️' },
-      { id: 'g7-equations', name: 'משוואות במעלמה ראשונה', icon: '=' },
+      { id: 'g7-equations', name: 'משוואות במעלה ראשונה', icon: '=' },
     ],
   },
   {
@@ -121,5 +121,4 @@ export const CURRICULUM: GradeLevel[] = [
       { id: 'g12-vectors', name: 'וקטורים', icon: '↗️' },
       { id: 'g12-complex', name: 'מספרים מרוכבים', icon: 'i' },
     ],
-  },
-];
+  ],

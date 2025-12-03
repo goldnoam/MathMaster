@@ -1,5 +1,4 @@
-
-import { QuizQuestion, Difficulty } from '../types';
+import { QuizQuestion, Difficulty } from '../types.ts';
 
 const STORAGE_PREFIX = 'mathmaster_cache_';
 const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 7; // 7 Days

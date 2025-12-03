@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import Footer from './Footer.tsx';
 
 interface LessonViewProps {
   content: string;
@@ -52,6 +53,8 @@ const LessonView: React.FC<LessonViewProps> = ({ content, onStartQuiz, onBack })
     }
   };
 
+  const progressPercentage = ((currentSectionIndex + 1) / sections.length) * 100;
+
   return (
     <div className="max-w-3xl mx-auto p-4 pb-32">
        <div className="flex justify-between items-center mb-4">
@@ -73,18 +76,25 @@ const LessonView: React.FC<LessonViewProps> = ({ content, onStartQuiz, onBack })
         </button>
        </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-6 md:p-8 min-h-[400px] relative">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-6 md:p-8 min-h-[400px] relative overflow-hidden">
         {/* Progress Bar for sections */}
         {sections.length > 1 && (
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-t-2xl overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gray-100 dark:bg-gray-700">
             <div 
               className="h-full bg-indigo-500 transition-all duration-300"
-              style={{ width: `${((currentSectionIndex + 1) / sections.length) * 100}%` }}
+              style={{ width: `${progressPercentage}%` }}
             />
           </div>
         )}
+        
+        {/* Visual Progress Indicator inside card */}
+        {sections.length > 1 && (
+           <div className="absolute top-3 left-4 text-xs font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-full">
+             התקדמות: {Math.round(progressPercentage)}%
+           </div>
+        )}
 
-        <div className="prose prose-lg prose-indigo dark:prose-invert max-w-none text-right font-normal" dir="rtl">
+        <div className="prose prose-lg prose-indigo dark:prose-invert max-w-none text-right font-normal mt-2" dir="rtl">
            <ReactMarkdown 
              components={{
                h1: ({node, ...props}) => <h1 className="text-3xl font-bold text-indigo-700 dark:text-indigo-400 mb-4" {...props} />,
@@ -103,8 +113,11 @@ const LessonView: React.FC<LessonViewProps> = ({ content, onStartQuiz, onBack })
         </div>
       </div>
 
+      {/* Internal Footer for Lesson View */}
+      <Footer />
+
       {/* Navigation & Action Area */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] transition-colors duration-300">
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] transition-colors duration-300 z-10">
         <div className="max-w-3xl mx-auto flex flex-col gap-3">
           
           {/* Section Navigation */}

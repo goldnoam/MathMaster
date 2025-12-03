@@ -1,4 +1,3 @@
-
 // Service Worker for Offline Access
 const CACHE_NAME = 'mathmaster-v1';
 
@@ -20,9 +19,14 @@ const PRECACHE_ASSETS = [
   '/components/LessonView.tsx',
   '/components/QuizView.tsx',
   '/components/LoadingSpinner.tsx',
-  // External CDNs used in index.html
+  // External CDNs used in index.html and import map
   'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;700&display=swap'
+  'https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;700&display=swap',
+  // Critical dependencies for offline functionality
+  'https://aistudiocdn.com/@google/genai@^1.30.0',
+  'https://aistudiocdn.com/react@^19.2.0',
+  'https://aistudiocdn.com/react-dom@^19.2.0',
+  'https://aistudiocdn.com/react-markdown@^10.1.0'
 ];
 
 self.addEventListener('install', (event) => {
