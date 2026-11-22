@@ -1,0 +1,332 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Primitive Security Helpers
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidGradeId(gradeId) {
+      return gradeId is string && gradeId.size() <= 24 && gradeId.matches('^(all|custom|grade-(1[0-2]|[1-9]))$');
+    }
+
+    function isValidDifficulty(diff) {
+      return diff is string && diff.size() <= 10 && diff in ['easy', 'medium', 'hard'];
+    }
+
+    function parentUserExists(userId) {
+      return existsAfter(/databases/$(database)/documents/users/$(userId))
+        && getAfter(/databases/$(database)/documents/users/$(userId)).data.uid == userId;
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'gradeId', 'points', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'gradeId', 'points', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.displayName is string
+        && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.gradeId is string
+        && data.gradeId.size() <= 20
+        && data.gradeId.matches('^(all|grade-(1[0-2]|[1-9]))$')
+        && data.points is int
+        && data.points >= 0 && data.points <= 10000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.email is string
+        && data.email.size() >= 3 && data.email.size() <= 160
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudiedTopic(data, userId, topicId) {
+      return data.keys().hasAll([
+          'userId', 'topicId', 'topicName', 'gradeId', 'gradeName',
+          'category', 'difficulty', 'lastStudiedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'topicId', 'topicName', 'gradeId', 'gradeName',
+          'category', 'difficulty', 'lastStudiedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.topicId is string
+        && data.topicId.size() >= 1 && data.topicId.size() <= 64
+        && data.topicId == topicId
+        && data.topicName is string
+        && data.topicName.size() >= 1 && data.topicName.size() <= 120
+        && isValidGradeId(data.gradeId)
+        && data.gradeName is string
+        && data.gradeName.size() >= 1 && data.gradeName.size() <= 40
+        && data.category is string
+        && data.category.size() >= 1 && data.category.size() <= 60
+        && isValidDifficulty(data.difficulty)
+        && data.lastStudiedAt is number
+        && data.lastStudiedAt > 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCompletedQuiz(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'topicId', 'topicName', 'gradeId', 'gradeName',
+          'category', 'difficulty', 'mode', 'score', 'total', 'percentage',
+          'completedAt', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'topicId', 'topicName', 'gradeId', 'gradeName',
+          'category', 'difficulty', 'mode', 'score', 'total', 'percentage',
+          'completedAt', 'createdAt'
+        ])
+        && data.userId is string
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.topicId is string
+        && data.topicId.size() >= 1 && data.topicId.size() <= 80
+        && data.topicId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.topicName is string
+        && data.topicName.size() >= 1 && data.topicName.size() <= 140
+        && isValidGradeId(data.gradeId)
+        && data.gradeName is string
+        && data.gradeName.size() >= 1 && data.gradeName.size() <= 50
+        && data.category is string
+        && data.category.size() >= 1 && data.category.size() <= 60
+        && isValidDifficulty(data.difficulty)
+        && data.mode is string
+        && data.mode.size() <= 20
+        && data.mode in ['topic', 'custom_practice', 'custom_exam']
+        && data.total is int && data.total >= 1 && data.total <= 100
+        && data.score is int && data.score >= 0 && data.score <= data.total
+        && data.percentage is int && data.percentage >= 0 && data.percentage <= 100
+        && data.completedAt is number && data.completedAt > 0
+        && data.createdAt is timestamp;
+    }
+
+    function isValidStudyGoal(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'targetGradeId', 'focusCategory', 'studyDays',
+          'dailyMinutes', 'weeklyTopicsTarget', 'includeMasteredReview', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'targetGradeId', 'focusCategory', 'studyDays',
+          'dailyMinutes', 'weeklyTopicsTarget', 'includeMasteredReview', 'updatedAt'
+        ])
+        && data.userId is string
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.targetGradeId is string
+        && data.targetGradeId.size() <= 20
+        && data.targetGradeId.matches('^(all|grade-(1[0-2]|[1-9]))$')
+        && data.focusCategory is string
+        && data.focusCategory.size() >= 1 && data.focusCategory.size() <= 60
+        && data.studyDays is list
+        && data.studyDays.size() >= 1 && data.studyDays.size() <= 7
+        && data.studyDays[0] is int && data.studyDays[0] >= 0 && data.studyDays[0] <= 6
+        && data.dailyMinutes is int && data.dailyMinutes >= 5 && data.dailyMinutes <= 240
+        && data.weeklyTopicsTarget is int && data.weeklyTopicsTarget >= 1 && data.weeklyTopicsTarget <= 30
+        && data.includeMasteredReview is bool
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Match Blocks
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'gradeId', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['points', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'gradeId', 'points', 'updatedAt'])
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId);
+
+      // Isolated PII subcollection
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && docId == 'info' && isOwner(userId);
+        allow list: if false;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'photoURL', 'updatedAt']);
+
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isOwner(userId);
+      }
+
+      // Studied Topics subcollection
+      match /studiedTopics/{topicId} {
+        allow get: if isValidId(userId) && isValidId(topicId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(topicId)
+          && isOwner(userId)
+          && isValidStudiedTopic(incoming(), userId, topicId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(topicId)
+          && isOwner(userId)
+          && isValidStudiedTopic(incoming(), userId, topicId)
+          && incoming().userId == existing().userId
+          && incoming().topicId == existing().topicId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'topicName', 'gradeId', 'gradeName', 'category', 'difficulty', 'lastStudiedAt', 'updatedAt'
+          ]);
+
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(topicId)
+          && isOwner(userId);
+      }
+
+      // Completed Quizzes & Custom Exams subcollection
+      match /quizzes/{quizId} {
+        allow get: if isValidId(userId) && isValidId(quizId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(quizId)
+          && isOwner(userId)
+          && isValidCompletedQuiz(incoming(), userId)
+          && incoming().createdAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(quizId)
+          && isOwner(userId);
+      }
+
+      // Study Goals subcollection
+      match /studyGoals/{goalId} {
+        allow get: if isValidId(userId) && isValidId(goalId) && goalId == 'current' && isOwner(userId);
+        allow list: if false;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(goalId)
+          && goalId == 'current'
+          && isOwner(userId)
+          && isValidStudyGoal(incoming(), userId)
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(goalId)
+          && goalId == 'current'
+          && isOwner(userId)
+          && isValidStudyGoal(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'targetGradeId', 'focusCategory', 'studyDays', 'dailyMinutes',
+            'weeklyTopicsTarget', 'includeMasteredReview', 'updatedAt'
+          ]);
+
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(goalId)
+          && goalId == 'current'
+          && isOwner(userId);
+      }
+    }
+  }
+}

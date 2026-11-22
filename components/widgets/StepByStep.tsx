@@ -10,57 +10,82 @@ const StepByStep: React.FC<StepByStepProps> = ({ title, steps }) => {
 
   const handleNextStep = () => {
     if (currentStep < steps.length) {
-      setCurrentStep(prev => prev + 1);
+      setCurrentStep((prev) => prev + 1);
     }
   };
 
+  const showAll = () => setCurrentStep(steps.length);
   const reset = () => setCurrentStep(0);
 
   return (
-    <div className="my-6 bg-white dark:bg-gray-800 border border-indigo-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden" dir="rtl">
-      <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 border-b border-indigo-100 dark:border-gray-700 flex justify-between items-center">
-        <h4 className="font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-2 text-sm md:text-base">
-          <span>👣</span> פתרון צעד-אחר-צעד: {title}
+    <div
+      className="my-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden"
+      dir="rtl"
+    >
+      <div className="bg-slate-50 dark:bg-slate-800/70 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap justify-between items-center gap-2">
+        <h4 className="font-display font-bold text-slate-900 dark:text-white text-sm md:text-base">
+          פתרון צעד-אחר-צעד: {title}
         </h4>
-        <button onClick={reset} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-          התחל מחדש
-        </button>
+        <div className="flex items-center gap-3 text-xs font-medium">
+          {currentStep < steps.length && (
+            <button
+              type="button"
+              onClick={showAll}
+              className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-sky-400 transition-colors"
+            >
+              הצגת הכל
+            </button>
+          )}
+          {currentStep > 0 && (
+            <button
+              type="button"
+              onClick={reset}
+              className="text-blue-600 dark:text-sky-400 hover:underline"
+            >
+              איפוס
+            </button>
+          )}
+        </div>
       </div>
-      
-      <div className="p-4 space-y-4">
-        {steps.map((step, index) => (
-          <div 
-            key={index}
-            className={`transition-all duration-500 transform ${
-              index < currentStep 
-                ? 'opacity-100 translate-x-0' 
-                : 'opacity-0 translate-x-4 hidden'
-            }`}
-          >
-            <div className="flex gap-3">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold text-sm border border-indigo-200 dark:border-indigo-700">
+
+      <div className="p-4 md:p-5 space-y-3">
+        {steps.map((step, index) => {
+          const isVisible = index < currentStep;
+          if (!isVisible) return null;
+
+          return (
+            <div key={index} className="animate-fadeIn flex items-start gap-3">
+              <div className="shrink-0 w-7 h-7 rounded-lg bg-blue-50 dark:bg-sky-950/60 border border-blue-200 dark:border-sky-800 flex items-center justify-center text-blue-700 dark:text-sky-300 font-mono tabular-nums font-semibold text-xs mt-0.5">
                 {index + 1}
               </div>
-              <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg flex-1 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-600">
+              <div className="bg-slate-50 dark:bg-slate-800/50 px-3.5 py-2.5 rounded-lg flex-1 text-sm md:text-base text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-700/70 leading-relaxed">
                 {step}
               </div>
             </div>
-            {index < steps.length - 1 && index < currentStep - 1 && (
-               <div className="w-0.5 h-4 bg-gray-300 dark:bg-gray-600 mr-4 my-1"></div>
-            )}
-          </div>
-        ))}
-        
+          );
+        })}
+
         {currentStep < steps.length ? (
           <button
+            type="button"
             onClick={handleNextStep}
-            className="w-full py-2 mt-2 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium rounded-lg transition-colors border border-dashed border-indigo-300 dark:border-indigo-700"
+            className="w-full py-2.5 px-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-blue-50 dark:hover:bg-sky-950/40 text-blue-700 dark:text-sky-300 text-sm font-semibold rounded-lg transition-colors border border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center gap-2"
           >
-             הצג את השלב הבא 👇
+            <span>
+              {currentStep === 0
+                ? 'התחלת פתרון מודרך (שלב 1)'
+                : `הצגת השלב הבא (${currentStep + 1} מתוך ${steps.length})`}
+            </span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
         ) : (
-          <div className="text-center text-green-600 dark:text-green-400 font-bold py-2 bg-green-50 dark:bg-green-900/20 rounded-lg mt-2">
-            ✨ הפתרון הושלם!
+          <div className="flex items-center justify-center gap-2 text-emerald-700 dark:text-emerald-400 text-sm font-semibold py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>הפתרון הושלם במלואו</span>
           </div>
         )}
       </div>

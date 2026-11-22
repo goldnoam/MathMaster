@@ -1,45 +1,68 @@
 import { QuizQuestion, Difficulty } from '../types.ts';
 import { STATIC_DATA_DB } from '../data/staticCurriculum.ts';
 import { loadFromCache, saveToCache } from './storageService.ts';
+import { generateLessonWithAI, generateQuizWithAI } from './geminiService.ts';
 
-// Helper to simulate "Processing" time for a realistic feel, even offline
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export const getLessonContent = async (gradeId: string, topicId: string, difficulty: Difficulty): Promise<{ markdown: string, keywords: Record<string, string> }> => {
-  await delay(600); // Small fake loading delay
+export interface ContentResult {
+  markdown: string;
+  keywords: Record<string, string>;
+  source: 'ai' | 'static' | 'cache';
+}
 
+export const getLessonContent = async (
+  gradeId: string,
+  gradeName: string,
+  topicId: string,
+  topicName: string,
+  difficulty: Difficulty
+): Promise<ContentResult> => {
   // 1. Try Cache
-  const cacheKey = `lesson_${gradeId}_${topicId}_${difficulty}`;
-  const cached = loadFromCache<{ markdown: string, keywords: Record<string, string> }>('lesson', gradeId, topicId, difficulty);
-  
-  if (cached) return cached;
+  const cached = loadFromCache<{ markdown: string; keywords: Record<string, string> }>('lesson', gradeId, topicId, difficulty);
+  if (cached) {
+    return {
+      ...cached,
+      source: 'cache'
+    };
+  }
 
-  // 2. Load from Static DB
+  // 2. Check Online Mode -> Try Gemini AI
+  if (navigator.onLine) {
+    try {
+      const aiResult = await generateLessonWithAI(gradeName, topicName, difficulty);
+      saveToCache('lesson', gradeId, topicId, difficulty, aiResult);
+      return {
+        ...aiResult,
+        source: 'ai'
+      };
+    } catch (e) {
+      console.warn("AI generation failed, falling back to static offline curriculum:", e);
+    }
+  }
+
+  // 3. Fallback to Static Offline DB
+  await delay(400);
   const gradeData = STATIC_DATA_DB[gradeId];
   const topicData = gradeData?.topics[topicId];
 
   if (!topicData) {
-    return {
+    const fallback = {
       markdown: `
-## מצטערים, התוכן בבנייה
-כרגע אין שיעור זמין לנושא זה בגרסת האופליין.
-אנא נסה את **חיבור וחיסור (כיתה א)** או **שברים (כיתה ד)** להדגמה מלאה.
+## שיעור בנושא: ${topicName}
+כרגע תוכן זה אינו זמין במסד הנתונים הלא מקוון (Offline).
+התחברו לאינטרנט כדי לאפשר למודל הבינה המלאכותית (Gemini AI) ליצור שיעור מותאם אישית עבורכם!
 
-### נסה מחשבון בינתיים:
+### מחשבון לתרגול:
 \`\`\`calculator
 \`\`\`
       `,
       keywords: {}
     };
+    return { ...fallback, source: 'static' };
   }
 
-  // Determine content based on difficulty (Mocking logic, in reality we might have 3 separate texts)
-  let markdown = topicData.lesson.markdown;
-  if (difficulty === 'easy') {
-    markdown = "## הקדמה (רמה קלה)\n" + markdown;
-  } else if (difficulty === 'hard') {
-    markdown = "## הקדמה (רמה מתקדמת)\n" + markdown + "\n\n## חומר למתקדמים\n...";
-  }
+  const markdown = topicData.lesson.markdown;
 
   const result = {
     markdown,
@@ -47,22 +70,51 @@ export const getLessonContent = async (gradeId: string, topicId: string, difficu
   };
 
   saveToCache('lesson', gradeId, topicId, difficulty, result);
-  return result;
+  return {
+    ...result,
+    source: 'static'
+  };
 };
 
-export const getQuizContent = async (gradeId: string, topicId: string, difficulty: Difficulty): Promise<QuizQuestion[]> => {
-  await delay(600);
+export const getQuizContent = async (
+  gradeId: string,
+  gradeName: string,
+  topicId: string,
+  topicName: string,
+  difficulty: Difficulty
+): Promise<QuizQuestion[]> => {
+  // 1. Try Cache
+  const cached = loadFromCache<QuizQuestion[]>('quiz', gradeId, topicId, difficulty);
+  if (cached && cached.length > 0) {
+    return cached;
+  }
 
+  // 2. Check Online Mode -> Try Gemini AI
+  if (navigator.onLine) {
+    try {
+      const aiQuestions = await generateQuizWithAI(gradeName, topicName, difficulty);
+      if (aiQuestions && aiQuestions.length > 0) {
+        saveToCache('quiz', gradeId, topicId, difficulty, aiQuestions);
+        return aiQuestions;
+      }
+    } catch (e) {
+      console.warn("AI quiz generation failed, falling back to static offline quiz:", e);
+    }
+  }
+
+  // 3. Fallback to Static Offline DB
+  await delay(400);
   const gradeData = STATIC_DATA_DB[gradeId];
   const topicData = gradeData?.topics[topicId];
 
   if (!topicData || !topicData.quiz) {
     return [
       {
-        question: "שאלה לדוגמה (התוכן חסר)",
-        options: ["תשובה 1", "תשובה 2", "תשובה 3", "תשובה 4"],
+        question: `שאלה ראשונה בנושא ${topicName}?`,
+        options: ["תשובה א׳", "תשובה ב׳", "תשובה ג׳", "תשובה ד׳"],
         correctAnswerIndex: 0,
-        explanation: "הסבר כללי."
+        explanation: "הסבר כללי על התשובה הנכונה.",
+        hint: "בדקו את הנתונים בשאלה."
       }
     ];
   }

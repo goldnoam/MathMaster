@@ -1,0 +1,230 @@
+import {
+  ALL_CATEGORIES,
+  CompletedQuizRecord,
+  Difficulty,
+  QuizModeType,
+  StudiedTopicRecord,
+  TopicCategory,
+  UserProgressData,
+} from '../types.ts';
+import { CURRICULUM } from '../constants.ts';
+
+const PROGRESS_STORAGE_KEY = 'mathmaster_user_progress_v1';
+
+const DEFAULT_PROGRESS: UserProgressData = {
+  points: 0,
+  studiedTopics: {},
+  completedQuizzes: [],
+};
+
+export const loadProgress = (): UserProgressData => {
+  try {
+    if (typeof localStorage === 'undefined') return DEFAULT_PROGRESS;
+    const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    if (!raw) return DEFAULT_PROGRESS;
+    const parsed = JSON.parse(raw) as Partial<UserProgressData>;
+    return {
+      points: typeof parsed.points === 'number' ? parsed.points : 0,
+      studiedTopics: parsed.studiedTopics && typeof parsed.studiedTopics === 'object' ? parsed.studiedTopics : {},
+      completedQuizzes: Array.isArray(parsed.completedQuizzes) ? parsed.completedQuizzes : [],
+    };
+  } catch (e) {
+    console.warn('Failed to load user progress:', e);
+    return DEFAULT_PROGRESS;
+  }
+};
+
+export const saveProgress = (data: UserProgressData): void => {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to save user progress:', e);
+  }
+};
+
+export const recordLessonStudied = (params: {
+  topicId: string;
+  topicName: string;
+  gradeId: string;
+  gradeName: string;
+  category?: TopicCategory;
+  difficulty: Difficulty;
+}): UserProgressData => {
+  const current = loadProgress();
+  const record: StudiedTopicRecord = {
+    topicId: params.topicId,
+    topicName: params.topicName,
+    gradeId: params.gradeId,
+    gradeName: params.gradeName,
+    category: params.category || 'אלגברה',
+    difficulty: params.difficulty,
+    lastStudiedAt: Date.now(),
+  };
+
+  const updated: UserProgressData = {
+    ...current,
+    studiedTopics: {
+      ...current.studiedTopics,
+      [params.topicId]: record,
+    },
+  };
+
+  saveProgress(updated);
+  return updated;
+};
+
+export const recordQuizCompleted = (params: {
+  topicId: string;
+  topicName: string;
+  gradeId: string;
+  gradeName: string;
+  category?: TopicCategory;
+  difficulty: Difficulty;
+  mode?: QuizModeType;
+  score: number;
+  total: number;
+}): UserProgressData => {
+  const current = loadProgress();
+  const percentage = params.total > 0 ? Math.round((params.score / params.total) * 100) : 0;
+  const earnedPoints = params.score * 10 + 5;
+
+  const quizRecord: CompletedQuizRecord = {
+    id: `${params.topicId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    topicId: params.topicId,
+    topicName: params.topicName,
+    gradeId: params.gradeId,
+    gradeName: params.gradeName,
+    category: params.category || 'אלגברה',
+    difficulty: params.difficulty,
+    mode: params.mode || 'topic',
+    score: params.score,
+    total: params.total,
+    percentage,
+    completedAt: Date.now(),
+  };
+
+  const updated: UserProgressData = {
+    points: current.points + earnedPoints,
+    studiedTopics: current.studiedTopics,
+    completedQuizzes: [quizRecord, ...current.completedQuizzes],
+  };
+
+  saveProgress(updated);
+  return updated;
+};
+
+export const resetUserProgress = (): UserProgressData => {
+  const fresh: UserProgressData = {
+    points: 0,
+    studiedTopics: {},
+    completedQuizzes: [],
+  };
+  saveProgress(fresh);
+  return fresh;
+};
+
+export interface CategoryRadarPoint {
+  category: TopicCategory;
+  shortLabel: string;
+  masteryScore: number; // Average best score (0-100) across practiced topics in category
+  coverageScore: number; // % of topics in category studied or completed
+  totalTopics: number;
+  studiedCount: number;
+  masteredCount: number;
+  quizzesCount: number;
+}
+
+const SHORT_CATEGORY_LABELS: Record<TopicCategory, string> = {
+  'חשבון יסודי': 'חשבון יסודי',
+  'אלגברה': 'אלגברה',
+  'גיאומטריה': 'גיאומטריה',
+  'טריגונומטריה': 'טריגונומטריה',
+  'חשבון דיפרנציאלי ואינטגרלי': 'חדו״א',
+  'הסתברות וסטטיסטיקה': 'הסתברות',
+};
+
+export const MASTERY_THRESHOLD = 80;
+
+export const computeDashboardAnalytics = (progress: UserProgressData) => {
+  // Best quiz score per topic
+  const bestByTopic: Record<string, number> = {};
+  const quizCountByTopic: Record<string, number> = {};
+
+  progress.completedQuizzes.forEach((q) => {
+    quizCountByTopic[q.topicId] = (quizCountByTopic[q.topicId] || 0) + 1;
+    if (bestByTopic[q.topicId] === undefined || q.percentage > bestByTopic[q.topicId]) {
+      bestByTopic[q.topicId] = q.percentage;
+    }
+  });
+
+  const masteredTopicIds = new Set<string>(
+    Object.entries(bestByTopic)
+      .filter(([, pct]) => pct >= MASTERY_THRESHOLD)
+      .map(([topicId]) => topicId)
+  );
+
+  // Build radar points across all 6 mathematical domains
+  const radarData: CategoryRadarPoint[] = ALL_CATEGORIES.map((category) => {
+    const topicsInCategory: string[] = [];
+    CURRICULUM.forEach((grade) => {
+      grade.topics.forEach((topic) => {
+        if ((topic.category || 'אלגברה') === category) {
+          topicsInCategory.push(topic.id);
+        }
+      });
+    });
+
+    const totalTopics = topicsInCategory.length;
+    let studiedCount = 0;
+    let masteredCount = 0;
+    let scoreSum = 0;
+    let quizzedTopicsCount = 0;
+    let quizzesCount = 0;
+
+    topicsInCategory.forEach((tid) => {
+      const isStudied = Boolean(progress.studiedTopics[tid]) || bestByTopic[tid] !== undefined;
+      if (isStudied) studiedCount += 1;
+      if (masteredTopicIds.has(tid)) masteredCount += 1;
+      if (bestByTopic[tid] !== undefined) {
+        scoreSum += bestByTopic[tid];
+        quizzedTopicsCount += 1;
+      }
+      quizzesCount += quizCountByTopic[tid] || 0;
+    });
+
+    const masteryScore = quizzedTopicsCount > 0 ? Math.round(scoreSum / quizzedTopicsCount) : 0;
+    const coverageScore = totalTopics > 0 ? Math.round((studiedCount / totalTopics) * 100) : 0;
+
+    return {
+      category,
+      shortLabel: SHORT_CATEGORY_LABELS[category],
+      masteryScore,
+      coverageScore,
+      totalTopics,
+      studiedCount,
+      masteredCount,
+      quizzesCount,
+    };
+  });
+
+  const totalCurriculumTopics = CURRICULUM.reduce((acc, g) => acc + g.topics.length, 0);
+  const averageQuizScore =
+    progress.completedQuizzes.length > 0
+      ? Math.round(
+          progress.completedQuizzes.reduce((sum, q) => sum + q.percentage, 0) /
+            progress.completedQuizzes.length
+        )
+      : null;
+
+  return {
+    radarData,
+    masteredTopicIds,
+    bestByTopic,
+    quizCountByTopic,
+    masteredCount: masteredTopicIds.size,
+    studiedCount: Object.keys(progress.studiedTopics).length,
+    totalCurriculumTopics,
+    averageQuizScore,
+  };
+};

@@ -1,0 +1,330 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Student public academic profile and accumulated practice points.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Student display name shown in the learning workspace.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "gradeId": {
+          "type": "string",
+          "description": "Selected target grade identifier (e.g. grade-9 or all).",
+          "maxLength": 20,
+          "pattern": "^(all|grade-(1[0-2]|[1-9]))$"
+        },
+        "points": {
+          "type": "integer",
+          "description": "Accumulated practice score points."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["uid", "displayName", "gradeId", "points", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII record containing student email and avatar URL.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email address.",
+          "maxLength": 160
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Optional profile avatar URL.",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "StudiedTopic": {
+      "title": "StudiedTopic",
+      "description": "Record of a curriculum topic opened and studied by the student.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner student UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "topicId": {
+          "type": "string",
+          "description": "Curriculum topic identifier.",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "topicName": {
+          "type": "string",
+          "description": "Localized topic name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "gradeId": {
+          "type": "string",
+          "description": "Curriculum grade identifier.",
+          "maxLength": 24,
+          "pattern": "^(custom|grade-(1[0-2]|[1-9]))$"
+        },
+        "gradeName": {
+          "type": "string",
+          "description": "Localized grade name.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "category": {
+          "type": "string",
+          "description": "Mathematical subject domain.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["easy", "medium", "hard"],
+          "description": "Last studied difficulty level."
+        },
+        "lastStudiedAt": {
+          "type": "number",
+          "description": "Client epoch milliseconds timestamp when last studied."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "topicId",
+        "topicName",
+        "gradeId",
+        "gradeName",
+        "category",
+        "difficulty",
+        "lastStudiedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CompletedQuiz": {
+      "title": "CompletedQuiz",
+      "description": "Immutable record of a completed topic quiz or custom exam.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner student UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "topicId": {
+          "type": "string",
+          "description": "Topic or custom exam identifier.",
+          "maxLength": 80,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "topicName": {
+          "type": "string",
+          "description": "Localized topic or custom exam title.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "gradeId": {
+          "type": "string",
+          "description": "Grade identifier or custom.",
+          "maxLength": 24,
+          "pattern": "^(custom|grade-(1[0-2]|[1-9]))$"
+        },
+        "gradeName": {
+          "type": "string",
+          "description": "Localized grade or custom scope label.",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "category": {
+          "type": "string",
+          "description": "Mathematical subject domain.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["easy", "medium", "hard"],
+          "description": "Quiz difficulty level."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["topic", "custom_practice", "custom_exam"],
+          "description": "Whether quiz came from a topic lesson or custom generator."
+        },
+        "score": {
+          "type": "integer",
+          "description": "Correct answers count."
+        },
+        "total": {
+          "type": "integer",
+          "description": "Total questions count."
+        },
+        "percentage": {
+          "type": "integer",
+          "description": "Percentage score from 0 to 100."
+        },
+        "completedAt": {
+          "type": "number",
+          "description": "Client epoch milliseconds timestamp when completed."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "topicId",
+        "topicName",
+        "gradeId",
+        "gradeName",
+        "category",
+        "difficulty",
+        "mode",
+        "score",
+        "total",
+        "percentage",
+        "completedAt",
+        "createdAt"
+      ]
+    },
+    "StudyGoalDoc": {
+      "title": "StudyGoalDoc",
+      "description": "Weekly study schedule preferences for the student.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner student UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetGradeId": {
+          "type": "string",
+          "description": "Target grade scope.",
+          "maxLength": 20,
+          "pattern": "^(all|grade-(1[0-2]|[1-9]))$"
+        },
+        "focusCategory": {
+          "type": "string",
+          "description": "Selected focus domain or all.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "studyDays": {
+          "type": "array",
+          "description": "Day indices 0..6 for weekly study sessions (max 7 items)."
+        },
+        "dailyMinutes": {
+          "type": "integer",
+          "description": "Target minutes per study day."
+        },
+        "weeklyTopicsTarget": {
+          "type": "integer",
+          "description": "Target topics per week."
+        },
+        "includeMasteredReview": {
+          "type": "boolean",
+          "description": "Whether to schedule spaced review sessions for mastered topics."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "targetGradeId",
+        "focusCategory",
+        "studyDays",
+        "dailyMinutes",
+        "weeklyTopicsTarget",
+        "includeMasteredReview",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Student profile document keyed by Firebase Auth UID."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": {
+        "$ref": "#/entities/UserPrivateInfo"
+      },
+      "description": "Isolated PII subcollection (docId == 'info') strictly limited to owner."
+    },
+    "/users/{userId}/studiedTopics/{topicId}": {
+      "schema": {
+        "$ref": "#/entities/StudiedTopic"
+      },
+      "description": "Subcollection tracking topics opened and studied by the student."
+    },
+    "/users/{userId}/quizzes/{quizId}": {
+      "schema": {
+        "$ref": "#/entities/CompletedQuiz"
+      },
+      "description": "Subcollection storing completed quiz and custom exam results."
+    },
+    "/users/{userId}/studyGoals/{goalId}": {
+      "schema": {
+        "$ref": "#/entities/StudyGoalDoc"
+      },
+      "description": "Subcollection storing the student's personalized weekly study goal (goalId == 'current')."
+    }
+  }
+}

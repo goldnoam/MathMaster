@@ -1,0 +1,77 @@
+/* Base Typography & Mathematical Studio Aesthetics */
+:root {
+  --grid-line: rgba(15, 23, 42, 0.045);
+  --grid-dot: rgba(37, 99, 235, 0.12);
+}
+
+.dark {
+  --grid-line: rgba(148, 163, 184, 0.06);
+  --grid-dot: rgba(56, 189, 248, 0.14);
+}
+
+body {
+  font-family: 'Heebo', sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Rubik', 'Heebo', sans-serif;
+  text-wrap: balance;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle Architectural Coordinate Grid */
+.math-grid-bg {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* Smooth Settling Reveal */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
+}

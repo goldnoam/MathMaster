@@ -1,6 +1,6 @@
 import { QuizQuestion, Difficulty } from '../types.ts';
 
-const STORAGE_PREFIX = 'mathmaster_cache_';
+const STORAGE_PREFIX = 'mathmaster_cache_v2_';
 const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 7; // 7 Days
 
 interface CacheItem<T> {
