@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import {
   ALL_CATEGORIES,
+  DashboardSection,
   DIFFICULTY_LABELS,
   Difficulty,
   GradeLevel,
@@ -25,13 +26,16 @@ import {
   computeDashboardAnalytics,
   MASTERY_THRESHOLD,
 } from '../services/progressService.ts';
+import { evaluateAchievements } from '../services/achievementService.ts';
 import TopicGlyph from './TopicGlyph.tsx';
 import StudyPlannerPanel from './StudyPlannerPanel.tsx';
+import AchievementsPanel from './AchievementsPanel.tsx';
+import AchievementBadgeIcon from './AchievementBadgeIcon.tsx';
 
 interface DashboardViewProps {
   progress: UserProgressData;
   isDarkMode: boolean;
-  initialSection?: 'overview' | 'planner';
+  initialSection?: DashboardSection;
   account?: UserAccountProfile | null;
   onOpenAuthModal?: () => void;
   onGoalChange?: (goal: StudyGoal) => void;
@@ -126,7 +130,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenTopic,
   onResetProgress,
 }) => {
-  const [section, setSection] = useState<'overview' | 'planner'>(initialSection);
+  const [section, setSection] = useState<DashboardSection>(initialSection);
   const [activeTab, setActiveTab] = useState<'quizzes' | 'topics'>('quizzes');
   const [categoryFilter, setCategoryFilter] = useState<TopicCategory | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -137,6 +141,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   }, [initialSection]);
 
   const analytics = useMemo(() => computeDashboardAnalytics(progress), [progress]);
+  const achievementSummary = useMemo(() => evaluateAchievements(progress), [progress]);
 
   const hasAnyActivity =
     progress.completedQuizzes.length > 0 || Object.keys(progress.studiedTopics).length > 0;
@@ -315,10 +320,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      {/* Primary Section Switcher: Overview & Radar vs. Weekly Study Planner */}
+      {/* Primary Section Switcher: Overview & Radar vs. Weekly Study Planner vs. Achievements */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div
-          className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl"
+          className="inline-flex flex-wrap items-center p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl gap-1"
           role="tablist"
           aria-label="תצוגת לוח התקדמות"
         >
@@ -333,7 +338,23 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            רדאר שליטה והישגים
+            רדאר שליטה ומדדים
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === 'achievements'}
+            onClick={() => setSection('achievements')}
+            className={`px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors whitespace-nowrap inline-flex items-center gap-2 ${
+              section === 'achievements'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <span>הישגים ותגים</span>
+            <span className="font-mono tabular-nums text-[11px] text-blue-600 dark:text-sky-400">
+              {achievementSummary.unlockedCount}/{achievementSummary.totalCount}
+            </span>
           </button>
           <button
             type="button"
@@ -358,6 +379,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({
           onStartScheduledTopic={(grade, topic, difficulty) =>
             onOpenTopic(grade, topic, difficulty)
           }
+        />
+      ) : section === 'achievements' ? (
+        <AchievementsPanel
+          progress={progress}
+          onStartPractice={onBack}
         />
       ) : (
         <>
@@ -411,8 +437,67 @@ const DashboardView: React.FC<DashboardViewProps> = ({
             {progress.points}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
-            נקודות שנצברו מתרגול
+            רצף נוכחי:{' '}
+            <span className="font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300">
+              {achievementSummary.streak.currentStreak}
+            </span>{' '}
+            ימים
           </div>
+        </div>
+      </section>
+
+      {/* Compact Streak & Unlocked Achievements Strip */}
+      <section
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 md:p-5 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
+        aria-label="תקציר רצף ותגי הישג"
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/70 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <AchievementBadgeIcon iconKey="trophy" className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-slate-900 dark:text-white">
+              הישגים ורצף למידה ·{' '}
+              <span className="font-mono tabular-nums text-blue-600 dark:text-sky-400">
+                {achievementSummary.unlockedCount}/{achievementSummary.totalCount}
+              </span>{' '}
+              תגים נפתחו
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              רצף נוכחי:{' '}
+              <span className="font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300">
+                {achievementSummary.streak.currentStreak}
+              </span>{' '}
+              ימים · שיא:{' '}
+              <span className="font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300">
+                {achievementSummary.streak.longestStreak}
+              </span>{' '}
+              ימים
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {achievementSummary.statuses
+            .filter((s) => s.unlocked)
+            .slice(0, 3)
+            .map((badge) => (
+              <span
+                key={badge.id}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-xs font-medium text-slate-800 dark:text-slate-200"
+              >
+                <AchievementBadgeIcon iconKey={badge.iconKey} className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>{badge.title}</span>
+              </span>
+            ))}
+
+          <button
+            type="button"
+            onClick={() => setSection('achievements')}
+            className="px-3.5 py-1.5 rounded-lg border border-blue-200 dark:border-sky-800 bg-blue-50/70 dark:bg-sky-950/40 text-blue-700 dark:text-sky-300 text-xs font-semibold hover:bg-blue-100/80 dark:hover:bg-sky-900/50 transition-colors whitespace-nowrap"
+          >
+            לכל התגים וההישגים
+          </button>
         </div>
       </section>
 

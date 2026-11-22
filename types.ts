@@ -99,6 +99,58 @@ export interface UserProgressData {
   points: number;
   studiedTopics: Record<string, StudiedTopicRecord>;
   completedQuizzes: CompletedQuizRecord[];
+  activityDates?: string[];
+  unlockedAchievements?: Record<string, UnlockedAchievementRecord>;
+}
+
+export type AchievementCategory = 'streak' | 'mastery' | 'quiz';
+
+export type DashboardSection = 'overview' | 'planner' | 'achievements';
+
+export interface UnlockedAchievementRecord {
+  badgeId: string;
+  title: string;
+  category: AchievementCategory;
+  unlockedAt: number;
+}
+
+export interface AchievementDefinition {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  category: AchievementCategory;
+  target: number;
+  unitLabel: string;
+  iconKey:
+    | 'spark'
+    | 'flame'
+    | 'calendar-check'
+    | 'compass'
+    | 'sigma'
+    | 'triangle'
+    | 'abacus'
+    | 'wave'
+    | 'chart'
+    | 'crown'
+    | 'shield-check'
+    | 'trophy';
+  accentColor: 'amber' | 'blue' | 'emerald' | 'indigo' | 'violet';
+}
+
+export interface AchievementStatus extends AchievementDefinition {
+  unlocked: boolean;
+  unlockedAt: number | null;
+  current: number;
+  progressPercent: number;
+}
+
+export interface StreakStats {
+  currentStreak: number;
+  longestStreak: number;
+  activeDaysTotal: number;
+  activeToday: boolean;
+  activeDateKeys: string[];
 }
 
 export interface UserAccountProfile {

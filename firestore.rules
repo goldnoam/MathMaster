@@ -27,6 +27,12 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidDateKey(dateKey) {
+      return dateKey is string
+        && dateKey.size() == 10
+        && dateKey.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -41,6 +47,10 @@ service cloud.firestore {
 
     function isValidDifficulty(diff) {
       return diff is string && diff.size() <= 10 && diff in ['easy', 'medium', 'hard'];
+    }
+
+    function isValidAchievementCategory(cat) {
+      return cat is string && cat.size() <= 12 && cat in ['streak', 'mastery', 'quiz'];
     }
 
     function parentUserExists(userId) {
@@ -173,6 +183,40 @@ service cloud.firestore {
         && data.dailyMinutes is int && data.dailyMinutes >= 5 && data.dailyMinutes <= 240
         && data.weeklyTopicsTarget is int && data.weeklyTopicsTarget >= 1 && data.weeklyTopicsTarget <= 30
         && data.includeMasteredReview is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUnlockedAchievement(data, userId, badgeId) {
+      return data.keys().hasAll(['userId', 'badgeId', 'title', 'category', 'unlockedAt', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'badgeId', 'title', 'category', 'unlockedAt', 'createdAt'])
+        && data.userId is string
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.badgeId is string
+        && data.badgeId.size() >= 1 && data.badgeId.size() <= 64
+        && data.badgeId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.badgeId == badgeId
+        && data.title is string
+        && data.title.size() >= 1 && data.title.size() <= 100
+        && isValidAchievementCategory(data.category)
+        && data.unlockedAt is number
+        && data.unlockedAt > 0
+        && data.createdAt is timestamp;
+    }
+
+    function isValidActivityDay(data, userId, dateKey) {
+      return data.keys().hasAll(['userId', 'dateKey', 'actionsCount', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'dateKey', 'actionsCount', 'createdAt', 'updatedAt'])
+        && data.userId is string
+        && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && isValidDateKey(data.dateKey)
+        && data.dateKey == dateKey
+        && data.actionsCount is int
+        && data.actionsCount >= 1 && data.actionsCount <= 500
+        && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
@@ -325,6 +369,58 @@ service cloud.firestore {
           && isValidId(userId)
           && isValidId(goalId)
           && goalId == 'current'
+          && isOwner(userId);
+      }
+
+      // Unlocked Achievements subcollection
+      match /achievements/{badgeId} {
+        allow get: if isValidId(userId) && isValidId(badgeId) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(badgeId)
+          && isOwner(userId)
+          && isValidUnlockedAchievement(incoming(), userId, badgeId)
+          && incoming().createdAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if false;
+
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(badgeId)
+          && isOwner(userId);
+      }
+
+      // Active Study Calendar Days subcollection (Daily Streak tracking)
+      match /activityDays/{dateKey} {
+        allow get: if isValidId(userId) && isValidDateKey(dateKey) && isOwner(userId);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidDateKey(dateKey)
+          && isOwner(userId)
+          && isValidActivityDay(incoming(), userId, dateKey)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidDateKey(dateKey)
+          && isOwner(userId)
+          && isValidActivityDay(incoming(), userId, dateKey)
+          && incoming().userId == existing().userId
+          && incoming().dateKey == existing().dateKey
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['actionsCount', 'updatedAt']);
+
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidDateKey(dateKey)
           && isOwner(userId);
       }
     }

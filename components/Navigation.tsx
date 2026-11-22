@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppView, UserAccountProfile } from '../types.ts';
+import { AppView, DashboardSection, UserAccountProfile } from '../types.ts';
 import Breadcrumbs from './Breadcrumbs.tsx';
 
 interface NavigationProps {
@@ -8,12 +8,13 @@ interface NavigationProps {
   onHomeClick: () => void;
   onGradeClick?: () => void;
   onDashboardClick: () => void;
+  onAchievementsClick: () => void;
   onPlannerClick: () => void;
   onCustomExamClick: () => void;
   onVisualLabClick: () => void;
   onOpenAuthModal: () => void;
   account: UserAccountProfile | null;
-  activeDashboardSection?: 'overview' | 'planner';
+  activeDashboardSection?: DashboardSection;
   gradeName?: string;
   topicName?: string;
   isDarkMode: boolean;
@@ -27,6 +28,7 @@ const Navigation: React.FC<NavigationProps> = ({
   onHomeClick,
   onGradeClick,
   onDashboardClick,
+  onAchievementsClick,
   onPlannerClick,
   onCustomExamClick,
   onVisualLabClick,
@@ -41,6 +43,7 @@ const Navigation: React.FC<NavigationProps> = ({
 }) => {
   const isDashboard = currentView === AppView.DASHBOARD;
   const isOverviewActive = isDashboard && activeDashboardSection === 'overview';
+  const isAchievementsActive = isDashboard && activeDashboardSection === 'achievements';
   const isPlannerActive = isDashboard && activeDashboardSection === 'planner';
   const isCustomExamActive = currentView === AppView.CUSTOM_EXAM;
   const isVisualLabActive = currentView === AppView.VISUAL_LAB;
@@ -127,6 +130,19 @@ const Navigation: React.FC<NavigationProps> = ({
             }`}
           >
             תכנית שבועית
+          </button>
+
+          {/* Achievements Text Link */}
+          <button
+            type="button"
+            onClick={onAchievementsClick}
+            className={`hidden lg:inline-flex items-center text-xs font-medium transition-colors whitespace-nowrap shrink-0 py-1 px-1.5 hover:underline underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 rounded ${
+              isAchievementsActive
+                ? 'text-blue-600 dark:text-sky-400 underline font-semibold'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            הישגים
           </button>
 
           {/* Progress Dashboard Button */}

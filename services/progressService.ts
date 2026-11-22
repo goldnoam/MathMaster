@@ -5,9 +5,16 @@ import {
   QuizModeType,
   StudiedTopicRecord,
   TopicCategory,
+  UnlockedAchievementRecord,
   UserProgressData,
 } from '../types.ts';
 import { CURRICULUM } from '../constants.ts';
+import {
+  collectActiveDateKeys,
+  DATE_KEY_REGEX,
+  evaluateAchievements,
+  toLocalDateKey,
+} from './achievementService.ts';
 
 const PROGRESS_STORAGE_KEY = 'mathmaster_user_progress_v1';
 
@@ -15,6 +22,40 @@ const DEFAULT_PROGRESS: UserProgressData = {
   points: 0,
   studiedTopics: {},
   completedQuizzes: [],
+  activityDates: [],
+  unlockedAchievements: {},
+};
+
+export interface ProgressMutationResult {
+  progress: UserProgressData;
+  newlyUnlocked: UnlockedAchievementRecord[];
+  activeDateKey: string;
+}
+
+const sanitizeUnlockedMap = (
+  raw: unknown
+): Record<string, UnlockedAchievementRecord> => {
+  if (!raw || typeof raw !== 'object') return {};
+  const result: Record<string, UnlockedAchievementRecord> = {};
+  Object.entries(raw as Record<string, Partial<UnlockedAchievementRecord>>).forEach(
+    ([key, val]) => {
+      if (
+        val &&
+        typeof val.badgeId === 'string' &&
+        typeof val.title === 'string' &&
+        typeof val.unlockedAt === 'number' &&
+        (val.category === 'streak' || val.category === 'mastery' || val.category === 'quiz')
+      ) {
+        result[key] = {
+          badgeId: val.badgeId,
+          title: val.title,
+          category: val.category,
+          unlockedAt: val.unlockedAt,
+        };
+      }
+    }
+  );
+  return result;
 };
 
 export const loadProgress = (): UserProgressData => {
@@ -23,10 +64,26 @@ export const loadProgress = (): UserProgressData => {
     const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
     if (!raw) return DEFAULT_PROGRESS;
     const parsed = JSON.parse(raw) as Partial<UserProgressData>;
-    return {
+    const base: UserProgressData = {
       points: typeof parsed.points === 'number' ? parsed.points : 0,
-      studiedTopics: parsed.studiedTopics && typeof parsed.studiedTopics === 'object' ? parsed.studiedTopics : {},
-      completedQuizzes: Array.isArray(parsed.completedQuizzes) ? parsed.completedQuizzes : [],
+      studiedTopics:
+        parsed.studiedTopics && typeof parsed.studiedTopics === 'object'
+          ? parsed.studiedTopics
+          : {},
+      completedQuizzes: Array.isArray(parsed.completedQuizzes)
+        ? parsed.completedQuizzes
+        : [],
+      activityDates: Array.isArray(parsed.activityDates)
+        ? parsed.activityDates.filter((d) => typeof d === 'string' && DATE_KEY_REGEX.test(d))
+        : [],
+      unlockedAchievements: sanitizeUnlockedMap(parsed.unlockedAchievements),
+    };
+    const mergedDates = collectActiveDateKeys(base);
+    const evaluated = evaluateAchievements({ ...base, activityDates: mergedDates });
+    return {
+      ...base,
+      activityDates: mergedDates,
+      unlockedAchievements: evaluated.mergedUnlockedMap,
     };
   } catch (e) {
     console.warn('Failed to load user progress:', e);
@@ -50,8 +107,11 @@ export const recordLessonStudied = (params: {
   gradeName: string;
   category?: TopicCategory;
   difficulty: Difficulty;
-}): UserProgressData => {
+}): ProgressMutationResult => {
   const current = loadProgress();
+  const now = Date.now();
+  const activeDateKey = toLocalDateKey(now);
+
   const record: StudiedTopicRecord = {
     topicId: params.topicId,
     topicName: params.topicName,
@@ -59,19 +119,34 @@ export const recordLessonStudied = (params: {
     gradeName: params.gradeName,
     category: params.category || 'אלגברה',
     difficulty: params.difficulty,
-    lastStudiedAt: Date.now(),
+    lastStudiedAt: now,
   };
 
-  const updated: UserProgressData = {
+  const nextDates = Array.from(
+    new Set([...(current.activityDates || []), activeDateKey])
+  ).sort();
+
+  const candidate: UserProgressData = {
     ...current,
     studiedTopics: {
       ...current.studiedTopics,
       [params.topicId]: record,
     },
+    activityDates: nextDates,
+  };
+
+  const evaluation = evaluateAchievements(candidate, now);
+  const updated: UserProgressData = {
+    ...candidate,
+    unlockedAchievements: evaluation.mergedUnlockedMap,
   };
 
   saveProgress(updated);
-  return updated;
+  return {
+    progress: updated,
+    newlyUnlocked: evaluation.newlyUnlocked,
+    activeDateKey,
+  };
 };
 
 export const recordQuizCompleted = (params: {
@@ -84,13 +159,15 @@ export const recordQuizCompleted = (params: {
   mode?: QuizModeType;
   score: number;
   total: number;
-}): UserProgressData => {
+}): ProgressMutationResult => {
   const current = loadProgress();
+  const now = Date.now();
+  const activeDateKey = toLocalDateKey(now);
   const percentage = params.total > 0 ? Math.round((params.score / params.total) * 100) : 0;
   const earnedPoints = params.score * 10 + 5;
 
   const quizRecord: CompletedQuizRecord = {
-    id: `${params.topicId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: `${params.topicId}_${now}_${Math.random().toString(36).slice(2, 7)}`,
     topicId: params.topicId,
     topicName: params.topicName,
     gradeId: params.gradeId,
@@ -101,17 +178,33 @@ export const recordQuizCompleted = (params: {
     score: params.score,
     total: params.total,
     percentage,
-    completedAt: Date.now(),
+    completedAt: now,
   };
 
-  const updated: UserProgressData = {
+  const nextDates = Array.from(
+    new Set([...(current.activityDates || []), activeDateKey])
+  ).sort();
+
+  const candidate: UserProgressData = {
+    ...current,
     points: current.points + earnedPoints,
     studiedTopics: current.studiedTopics,
     completedQuizzes: [quizRecord, ...current.completedQuizzes],
+    activityDates: nextDates,
+  };
+
+  const evaluation = evaluateAchievements(candidate, now);
+  const updated: UserProgressData = {
+    ...candidate,
+    unlockedAchievements: evaluation.mergedUnlockedMap,
   };
 
   saveProgress(updated);
-  return updated;
+  return {
+    progress: updated,
+    newlyUnlocked: evaluation.newlyUnlocked,
+    activeDateKey,
+  };
 };
 
 export const resetUserProgress = (): UserProgressData => {
@@ -119,6 +212,8 @@ export const resetUserProgress = (): UserProgressData => {
     points: 0,
     studiedTopics: {},
     completedQuizzes: [],
+    activityDates: [],
+    unlockedAchievements: {},
   };
   saveProgress(fresh);
   return fresh;

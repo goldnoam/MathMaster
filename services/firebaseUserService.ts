@@ -24,14 +24,21 @@ import {
   OperationType,
 } from '../firebase.ts';
 import {
+  AchievementCategory,
   CompletedQuizRecord,
   Difficulty,
   StudiedTopicRecord,
   StudyGoal,
   TopicCategory,
+  UnlockedAchievementRecord,
   UserAccountProfile,
   UserProgressData,
 } from '../types.ts';
+import {
+  collectActiveDateKeys,
+  DATE_KEY_REGEX,
+  evaluateAchievements,
+} from './achievementService.ts';
 
 const sanitizeId = (raw: string, maxLen = 64): string => {
   const cleaned = raw.replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, maxLen);
@@ -61,6 +68,11 @@ const sanitizeQuizGradeId = (raw?: string): string => {
 const sanitizeDifficulty = (raw?: string): Difficulty => {
   if (raw === 'easy' || raw === 'medium' || raw === 'hard') return raw;
   return 'medium';
+};
+
+const sanitizeAchievementCategory = (raw?: string): AchievementCategory => {
+  if (raw === 'streak' || raw === 'mastery' || raw === 'quiz') return raw;
+  return 'quiz';
 };
 
 const sanitizeStudyDays = (days: number[]): number[] => {
@@ -179,6 +191,37 @@ export const loadOrCreateUserCloudState = async (
       });
     });
 
+    // Migrate guest activity days & unlocked achievements
+    const activeDates = collectActiveDateKeys(localProgress).slice(-45);
+    activeDates.forEach((dateKey) => {
+      if (DATE_KEY_REGEX.test(dateKey)) {
+        const dayRef = doc(db, 'users', uid, 'activityDays', dateKey);
+        batch.set(dayRef, {
+          userId: uid,
+          dateKey,
+          actionsCount: 1,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    });
+
+    const evaluated = evaluateAchievements(localProgress);
+    Object.values(evaluated.mergedUnlockedMap)
+      .slice(0, 30)
+      .forEach((badge) => {
+        const safeBadgeId = sanitizeId(badge.badgeId, 64);
+        const achRef = doc(db, 'users', uid, 'achievements', safeBadgeId);
+        batch.set(achRef, {
+          userId: uid,
+          badgeId: safeBadgeId,
+          title: sanitizeText(badge.title, 100, 'הישג'),
+          category: sanitizeAchievementCategory(badge.category),
+          unlockedAt: badge.unlockedAt || Date.now(),
+          createdAt: serverTimestamp(),
+        });
+      });
+
     // Save initial study goal
     const goalRef = doc(db, 'users', uid, 'studyGoals', 'current');
     batch.set(goalRef, {
@@ -208,12 +251,16 @@ export const loadOrCreateUserCloudState = async (
         points: safePoints,
         isNewProfile: true,
       },
-      progress: localProgress,
+      progress: {
+        ...localProgress,
+        activityDates: activeDates,
+        unlockedAchievements: evaluated.mergedUnlockedMap,
+      },
       studyGoal: localGoal,
     };
   }
 
-  // Existing user: fetch profile, private info, studiedTopics, quizzes, studyGoal
+  // Existing user: fetch profile, private info, studiedTopics, quizzes, studyGoal, achievements, activityDays
   const userData = userSnap.data();
 
   let privateSnap;
@@ -276,6 +323,43 @@ export const loadOrCreateUserCloudState = async (
   });
   completedQuizzes.sort((a, b) => b.completedAt - a.completedAt);
 
+  let achievementsSnap;
+  try {
+    achievementsSnap = await getDocs(
+      query(collection(db, 'users', uid, 'achievements'), where('userId', '==', uid))
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, `users/${uid}/achievements`);
+  }
+
+  const cloudUnlocked: Record<string, UnlockedAchievementRecord> = {};
+  achievementsSnap.forEach((d) => {
+    const data = d.data();
+    cloudUnlocked[d.id] = {
+      badgeId: data.badgeId || d.id,
+      title: data.title,
+      category: sanitizeAchievementCategory(data.category),
+      unlockedAt: typeof data.unlockedAt === 'number' ? data.unlockedAt : Date.now(),
+    };
+  });
+
+  let activitySnap;
+  try {
+    activitySnap = await getDocs(
+      query(collection(db, 'users', uid, 'activityDays'), where('userId', '==', uid))
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, `users/${uid}/activityDays`);
+  }
+
+  const cloudActivityDates: string[] = [];
+  activitySnap.forEach((d) => {
+    const key = d.data().dateKey || d.id;
+    if (typeof key === 'string' && DATE_KEY_REGEX.test(key)) {
+      cloudActivityDates.push(key);
+    }
+  });
+
   let goalSnap;
   try {
     goalSnap = await getDoc(doc(db, 'users', uid, 'studyGoals', 'current'));
@@ -297,6 +381,27 @@ export const loadOrCreateUserCloudState = async (
     };
   }
 
+  const baseLoadedProgress: UserProgressData = {
+    points: typeof userData.points === 'number' ? userData.points : 0,
+    studiedTopics,
+    completedQuizzes,
+    activityDates: cloudActivityDates,
+    unlockedAchievements: cloudUnlocked,
+  };
+
+  const mergedActivityDates = collectActiveDateKeys(baseLoadedProgress);
+  const evalAfterLoad = evaluateAchievements({
+    ...baseLoadedProgress,
+    activityDates: mergedActivityDates,
+  });
+
+  // Persist any retroactively earned badges seamlessly
+  if (evalAfterLoad.newlyUnlocked.length > 0) {
+    syncAchievementsAndActivityToCloud(uid, null, evalAfterLoad.newlyUnlocked).catch((err) =>
+      console.warn('Cloud retroactive achievement sync warning:', err)
+    );
+  }
+
   return {
     profile: {
       uid,
@@ -308,9 +413,9 @@ export const loadOrCreateUserCloudState = async (
       isNewProfile: false,
     },
     progress: {
-      points: typeof userData.points === 'number' ? userData.points : 0,
-      studiedTopics,
-      completedQuizzes,
+      ...baseLoadedProgress,
+      activityDates: mergedActivityDates,
+      unlockedAchievements: evalAfterLoad.mergedUnlockedMap,
     },
     studyGoal: loadedGoal,
   };
@@ -336,6 +441,56 @@ export const updateUserProfileInCloud = async (
   }
 
   return { displayName: safeName, gradeId: safeGrade };
+};
+
+export const syncAchievementsAndActivityToCloud = async (
+  uid: string,
+  activeDateKey: string | null,
+  newlyUnlocked: UnlockedAchievementRecord[]
+): Promise<void> => {
+  if (activeDateKey && DATE_KEY_REGEX.test(activeDateKey)) {
+    const dayRef = doc(db, 'users', uid, 'activityDays', activeDateKey);
+    try {
+      const existingDay = await getDoc(dayRef);
+      if (existingDay.exists()) {
+        const currentCount = Number(existingDay.data().actionsCount || 1);
+        await updateDoc(dayRef, {
+          actionsCount: Math.min(500, Math.max(1, currentCount + 1)),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(dayRef, {
+          userId: uid,
+          dateKey: activeDateKey,
+          actionsCount: 1,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${uid}/activityDays/${activeDateKey}`);
+    }
+  }
+
+  for (const badge of newlyUnlocked) {
+    const safeBadgeId = sanitizeId(badge.badgeId, 64);
+    const achRef = doc(db, 'users', uid, 'achievements', safeBadgeId);
+    try {
+      const existingAch = await getDoc(achRef);
+      if (!existingAch.exists()) {
+        await setDoc(achRef, {
+          userId: uid,
+          badgeId: safeBadgeId,
+          title: sanitizeText(badge.title, 100, 'הישג'),
+          category: sanitizeAchievementCategory(badge.category),
+          unlockedAt: badge.unlockedAt || Date.now(),
+          createdAt: serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${uid}/achievements/${safeBadgeId}`);
+    }
+  }
 };
 
 export const syncStudiedTopicToCloud = async (
@@ -453,14 +608,18 @@ export const syncStudyGoalToCloud = async (
 
 export const resetCloudUserProgress = async (uid: string): Promise<void> => {
   try {
-    const [studiedSnap, quizzesSnap] = await Promise.all([
+    const [studiedSnap, quizzesSnap, achievementsSnap, activitySnap] = await Promise.all([
       getDocs(query(collection(db, 'users', uid, 'studiedTopics'), where('userId', '==', uid))),
       getDocs(query(collection(db, 'users', uid, 'quizzes'), where('userId', '==', uid))),
+      getDocs(query(collection(db, 'users', uid, 'achievements'), where('userId', '==', uid))),
+      getDocs(query(collection(db, 'users', uid, 'activityDays'), where('userId', '==', uid))),
     ]);
 
     const batch = writeBatch(db);
     studiedSnap.forEach((d) => batch.delete(d.ref));
     quizzesSnap.forEach((d) => batch.delete(d.ref));
+    achievementsSnap.forEach((d) => batch.delete(d.ref));
+    activitySnap.forEach((d) => batch.delete(d.ref));
     batch.update(doc(db, 'users', uid), {
       points: 0,
       updatedAt: serverTimestamp(),

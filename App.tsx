@@ -8,6 +8,7 @@ import DashboardView from './components/DashboardView.tsx';
 import CustomExamBuilder from './components/CustomExamBuilder.tsx';
 import VisualLabView from './components/VisualLabView.tsx';
 import AuthModal from './components/AuthModal.tsx';
+import AchievementToast from './components/AchievementToast.tsx';
 import LoadingSpinner from './components/LoadingSpinner.tsx';
 import Footer from './components/Footer.tsx';
 import {
@@ -20,6 +21,8 @@ import {
   UserAccountProfile,
   CustomExamConfig,
   StudyGoal,
+  DashboardSection,
+  UnlockedAchievementRecord,
 } from './types.ts';
 import { CURRICULUM } from './constants.ts';
 import { getLessonContent, getQuizContent } from './services/contentService.ts';
@@ -40,6 +43,7 @@ import {
   syncStudiedTopicToCloud,
   syncQuizCompletedToCloud,
   syncStudyGoalToCloud,
+  syncAchievementsAndActivityToCloud,
   resetCloudUserProgress,
 } from './services/firebaseUserService.ts';
 
@@ -141,7 +145,8 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [dashboardSection, setDashboardSection] = useState<'overview' | 'planner'>('overview');
+  const [dashboardSection, setDashboardSection] = useState<DashboardSection>('overview');
+  const [toastBadges, setToastBadges] = useState<UnlockedAchievementRecord[]>([]);
 
   const handleGoogleSignIn = async () => {
     setIsAuthBusy(true);
@@ -220,7 +225,7 @@ const App: React.FC = () => {
         setLessonKeywords(keywords);
         setLessonSource(source);
 
-        const updated = recordLessonStudied({
+        const { progress: updated, newlyUnlocked, activeDateKey } = recordLessonStudied({
           topicId: topic.id,
           topicName: topic.name,
           gradeId: selectedGrade.id,
@@ -229,10 +234,16 @@ const App: React.FC = () => {
           difficulty,
         });
         setProgress(updated);
+        if (newlyUnlocked.length > 0) {
+          setToastBadges(newlyUnlocked);
+        }
 
         if (account && updated.studiedTopics[topic.id]) {
           syncStudiedTopicToCloud(account.uid, updated.studiedTopics[topic.id]).catch((err) =>
             console.warn('Cloud studied topic sync warning:', err)
+          );
+          syncAchievementsAndActivityToCloud(account.uid, activeDateKey, newlyUnlocked).catch((err) =>
+            console.warn('Cloud achievement sync warning:', err)
           );
         }
       } catch (error) {
@@ -268,7 +279,7 @@ const App: React.FC = () => {
         setLessonKeywords(keywords);
         setLessonSource(source);
 
-        const updated = recordLessonStudied({
+        const { progress: updated, newlyUnlocked, activeDateKey } = recordLessonStudied({
           topicId: topic.id,
           topicName: topic.name,
           gradeId: grade.id,
@@ -277,10 +288,16 @@ const App: React.FC = () => {
           difficulty,
         });
         setProgress(updated);
+        if (newlyUnlocked.length > 0) {
+          setToastBadges(newlyUnlocked);
+        }
 
         if (account && updated.studiedTopics[topic.id]) {
           syncStudiedTopicToCloud(account.uid, updated.studiedTopics[topic.id]).catch((err) =>
             console.warn('Cloud studied topic sync warning:', err)
+          );
+          syncAchievementsAndActivityToCloud(account.uid, activeDateKey, newlyUnlocked).catch((err) =>
+            console.warn('Cloud achievement sync warning:', err)
           );
         }
       } catch (error) {
@@ -342,7 +359,7 @@ const App: React.FC = () => {
         const diff: Difficulty =
           activeCustomExam.difficulty === 'mixed' ? 'medium' : activeCustomExam.difficulty;
 
-        const updated = recordQuizCompleted({
+        const { progress: updated, newlyUnlocked, activeDateKey } = recordQuizCompleted({
           topicId: `custom-${Date.now()}`,
           topicName: activeCustomExam.title,
           gradeId: singleGrade ? singleGrade.id : 'custom',
@@ -354,6 +371,9 @@ const App: React.FC = () => {
           total,
         });
         setProgress(updated);
+        if (newlyUnlocked.length > 0) {
+          setToastBadges(newlyUnlocked);
+        }
 
         if (account && updated.completedQuizzes[0]) {
           setAccount((prev) => (prev ? { ...prev, points: updated.points } : null));
@@ -362,12 +382,15 @@ const App: React.FC = () => {
             updated.completedQuizzes[0],
             updated.points
           ).catch((err) => console.warn('Cloud custom quiz sync warning:', err));
+          syncAchievementsAndActivityToCloud(account.uid, activeDateKey, newlyUnlocked).catch((err) =>
+            console.warn('Cloud custom quiz achievement sync warning:', err)
+          );
         }
         return;
       }
 
       if (!selectedGrade || !selectedTopic) return;
-      const updated = recordQuizCompleted({
+      const { progress: updated, newlyUnlocked, activeDateKey } = recordQuizCompleted({
         topicId: selectedTopic.id,
         topicName: selectedTopic.name,
         gradeId: selectedGrade.id,
@@ -379,6 +402,9 @@ const App: React.FC = () => {
         total,
       });
       setProgress(updated);
+      if (newlyUnlocked.length > 0) {
+        setToastBadges(newlyUnlocked);
+      }
 
       if (account && updated.completedQuizzes[0]) {
         setAccount((prev) => (prev ? { ...prev, points: updated.points } : null));
@@ -387,6 +413,9 @@ const App: React.FC = () => {
           updated.completedQuizzes[0],
           updated.points
         ).catch((err) => console.warn('Cloud quiz sync warning:', err));
+        syncAchievementsAndActivityToCloud(account.uid, activeDateKey, newlyUnlocked).catch((err) =>
+          console.warn('Cloud quiz achievement sync warning:', err)
+        );
       }
     },
     [selectedGrade, selectedTopic, selectedDifficulty, activeCustomExam, account]
@@ -437,6 +466,12 @@ const App: React.FC = () => {
     setCurrentView(AppView.DASHBOARD);
   };
 
+  const handleAchievementsClick = () => {
+    setErrorMessage(null);
+    setDashboardSection('achievements');
+    setCurrentView(AppView.DASHBOARD);
+  };
+
   const handlePlannerClick = () => {
     setErrorMessage(null);
     setDashboardSection('planner');
@@ -464,6 +499,7 @@ const App: React.FC = () => {
   const handleResetProgress = () => {
     const fresh = resetUserProgress();
     setProgress(fresh);
+    setToastBadges([]);
     if (account) {
       setAccount((prev) => (prev ? { ...prev, points: 0 } : null));
       resetCloudUserProgress(account.uid).catch((err) =>
@@ -480,6 +516,7 @@ const App: React.FC = () => {
         onHomeClick={handleHomeClick}
         onGradeClick={handleBackToTopics}
         onDashboardClick={handleDashboardClick}
+        onAchievementsClick={handleAchievementsClick}
         onPlannerClick={handlePlannerClick}
         onCustomExamClick={handleCustomExamClick}
         onVisualLabClick={handleVisualLabClick}
@@ -601,6 +638,12 @@ const App: React.FC = () => {
         onSignOut={handleSignOut}
         studiedCount={Object.keys(progress.studiedTopics).length}
         quizzesCount={progress.completedQuizzes.length}
+      />
+
+      <AchievementToast
+        badges={toastBadges}
+        onDismiss={() => setToastBadges([])}
+        onViewAchievements={handleAchievementsClick}
       />
     </div>
   );
