@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MathRenderer from '../MathRenderer.tsx';
 
 interface StepByStepProps {
   title: string;
@@ -24,7 +25,8 @@ const StepByStep: React.FC<StepByStepProps> = ({ title, steps }) => {
     >
       <div className="bg-slate-50 dark:bg-slate-800/70 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap justify-between items-center gap-2">
         <h4 className="font-display font-bold text-slate-900 dark:text-white text-sm md:text-base">
-          פתרון צעד-אחר-צעד: {title}
+          <span>פתרון צעד-אחר-צעד: </span>
+          <MathRenderer text={title} />
         </h4>
         <div className="flex items-center gap-3 text-xs font-medium">
           {currentStep < steps.length && (
@@ -59,7 +61,7 @@ const StepByStep: React.FC<StepByStepProps> = ({ title, steps }) => {
                 {index + 1}
               </div>
               <div className="bg-slate-50 dark:bg-slate-800/50 px-3.5 py-2.5 rounded-lg flex-1 text-sm md:text-base text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-700/70 leading-relaxed">
-                {step}
+                <MathRenderer text={step} />
               </div>
             </div>
           );

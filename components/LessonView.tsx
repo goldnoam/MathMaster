@@ -5,6 +5,7 @@ import SimpleCalculator from './widgets/SimpleCalculator.tsx';
 import InlineExercise from './widgets/InlineExercise.tsx';
 import StepByStep from './widgets/StepByStep.tsx';
 import MathVisualWidget from './widgets/MathVisualWidget.tsx';
+import MathRenderer, { renderChildrenWithMath } from './MathRenderer.tsx';
 
 import { Difficulty, DIFFICULTY_LABELS, VisualDemoType } from '../types.ts';
 
@@ -135,23 +136,29 @@ const LessonView: React.FC<LessonViewProps> = ({
     sections.length > 0 ? ((safeIndex + 1) / sections.length) * 100 : 0;
 
   const markdownComponents: Components = {
-    h1: ({ node, ...props }) => (
+    h1: ({ node, children, ...props }) => (
       <h1
         className="font-display text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-5 leading-tight"
         {...props}
-      />
+      >
+        {renderChildrenWithMath(children)}
+      </h1>
     ),
-    h2: ({ node, ...props }) => (
+    h2: ({ node, children, ...props }) => (
       <h2
         className="font-display text-xl md:text-2xl font-bold text-slate-900 dark:text-white mt-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-800"
         {...props}
-      />
+      >
+        {renderChildrenWithMath(children)}
+      </h2>
     ),
-    h3: ({ node, ...props }) => (
+    h3: ({ node, children, ...props }) => (
       <h3
         className="font-display text-lg font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2"
         {...props}
-      />
+      >
+        {renderChildrenWithMath(children)}
+      </h3>
     ),
     ul: ({ node, ...props }) => (
       <ul
@@ -165,7 +172,11 @@ const LessonView: React.FC<LessonViewProps> = ({
         {...props}
       />
     ),
-    li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+    li: ({ node, children, ...props }) => (
+      <li className="leading-relaxed" {...props}>
+        {renderChildrenWithMath(children)}
+      </li>
+    ),
     hr: () => <hr className="my-6 border-slate-200 dark:border-slate-800" />,
     p: ({ node, children, ...props }) => {
       const dimClass = isFocusMode
@@ -174,7 +185,7 @@ const LessonView: React.FC<LessonViewProps> = ({
 
       return (
         <p className={`leading-relaxed mb-4 text-base ${dimClass}`} {...props}>
-          {children}
+          {renderChildrenWithMath(children)}
         </p>
       );
     },
@@ -198,7 +209,7 @@ const LessonView: React.FC<LessonViewProps> = ({
 
       const termEl = (
         <strong className={innerClass} {...props}>
-          {children}
+          {renderChildrenWithMath(children)}
         </strong>
       );
 
@@ -222,6 +233,10 @@ const LessonView: React.FC<LessonViewProps> = ({
       const match = /language-(\w+)/.exec(className || '');
       const type = match ? match[1] : '';
       const value = String(children).replace(/\n$/, '');
+
+      if (type === 'math' || type === 'latex') {
+        return <MathRenderer text={value} block />;
+      }
 
       if (type === 'calculator') {
         return <SimpleCalculator />;
@@ -258,6 +273,13 @@ const LessonView: React.FC<LessonViewProps> = ({
         }
       }
 
+      if (
+        (value.startsWith('$') && value.endsWith('$')) ||
+        /\\(frac|sqrt|pm|cdot|sum|int|alpha|beta|gamma|theta|pi|le|ge|ne|in|times|div)\b/.test(value)
+      ) {
+        return <MathRenderer text={value} />;
+      }
+
       return (
         <code
           className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-sky-300 font-mono text-sm"
@@ -268,11 +290,13 @@ const LessonView: React.FC<LessonViewProps> = ({
         </code>
       );
     },
-    blockquote: ({ node, ...props }) => (
+    blockquote: ({ node, children, ...props }) => (
       <blockquote
         className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 my-5 text-slate-700 dark:text-slate-300"
         {...props}
-      />
+      >
+        {renderChildrenWithMath(children)}
+      </blockquote>
     ),
   };
 
@@ -362,7 +386,9 @@ const LessonView: React.FC<LessonViewProps> = ({
                       <span className="font-mono tabular-nums text-[11px] opacity-70">
                         0{idx + 1}
                       </span>
-                      <span className="truncate">{title}</span>
+                      <span className="truncate">
+                        <MathRenderer text={title} />
+                      </span>
                     </button>
                   );
                 })}

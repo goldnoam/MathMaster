@@ -13,7 +13,6 @@ const PRECACHE_ASSETS = [
   '/firebase.ts',
   '/data/staticCurriculum.ts',
   '/data/questionBank.ts',
-  '/services/geminiService.ts',
   '/services/storageService.ts',
   '/services/progressService.ts',
   '/services/studyPlanService.ts',
@@ -37,12 +36,12 @@ const PRECACHE_ASSETS = [
   '/components/AuthModal.tsx',
   '/components/ErrorBoundary.tsx',
   '/components/widgets/MathVisualWidget.tsx',
+  '/components/MathRenderer.tsx',
   '/components/LoadingSpinner.tsx',
   // External CDNs used in index.html and import map
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rubik:wght@500;600;700;800&display=swap',
   // Critical dependencies for offline functionality
-  'https://aistudiocdn.com/@google/genai@^1.30.0',
   'https://aistudiocdn.com/react@^19.2.0',
   'https://aistudiocdn.com/react-dom@^19.2.0',
   'https://aistudiocdn.com/react-markdown@^10.1.0'

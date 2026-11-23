@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MathRenderer from '../MathRenderer.tsx';
 
 interface InlineExerciseProps {
   question: string;
@@ -32,7 +33,7 @@ const InlineExercise: React.FC<InlineExerciseProps> = ({ question, answer }) => 
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <label className="text-base font-semibold text-slate-900 dark:text-white leading-relaxed">
-          {question}
+          <MathRenderer text={question} />
         </label>
         <div className="flex items-center gap-2 shrink-0">
           <input

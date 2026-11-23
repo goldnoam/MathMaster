@@ -9,7 +9,7 @@ import {
   QuizQuestion,
   TopicCategory,
 } from '../types.ts';
-import { generateCustomQuestionsWithAI } from '../services/geminiService.ts';
+import MathRenderer from './MathRenderer.tsx';
 
 interface CustomExamBuilderProps {
   onBack: () => void;
@@ -49,7 +49,6 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
   const [questionCount, setQuestionCount] = useState<number>(6);
   const [mode, setMode] = useState<'practice' | 'exam'>('practice');
   const [timerMinutes, setTimerMinutes] = useState<number>(10);
-  const [useAiBoost, setUseAiBoost] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [previewSampleIndex, setPreviewSampleIndex] = useState<number>(0);
 
@@ -90,25 +89,6 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
         const med = pool.filter((q) => q.difficulty === 'medium');
         const hard = pool.filter((q) => q.difficulty === 'hard');
         pool = [...easy, ...med, ...hard];
-      }
-
-      if (isOnline && (useAiBoost || pool.length < questionCount)) {
-        const needed = Math.max(2, questionCount - pool.length);
-        const gradeNames = CURRICULUM.filter((g) =>
-          selectedGrades.length === 0 ? false : selectedGrades.includes(g.id)
-        ).map((g) => g.name);
-
-        const aiQuestions = await generateCustomQuestionsWithAI({
-          category: selectedCategory,
-          gradeNames,
-          difficulty,
-          count: Math.min(8, useAiBoost ? Math.max(3, needed) : needed),
-        });
-        if (aiQuestions.length > 0) {
-          pool = useAiBoost
-            ? [...aiQuestions, ...pool]
-            : [...pool, ...aiQuestions];
-        }
       }
 
       const finalQuestions = pool.slice(0, Math.min(questionCount, pool.length));
@@ -360,33 +340,19 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
                   </select>
                 </>
               ) : (
-                isOnline && (
-                  <div className="flex items-center justify-between gap-3 h-full pt-5">
-                    <div>
-                      <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        הוספת שאלות טריות אונליין
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        שילוב שאלות חדשות מעבר למאגר הקיים
-                      </div>
+                <div className="flex items-center justify-between gap-3 h-full pt-5">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      מאגר שאלות מובנה
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={useAiBoost}
-                      onClick={() => setUseAiBoost((prev) => !prev)}
-                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors shrink-0 ${
-                        useAiBoost ? 'bg-blue-600 dark:bg-sky-500' : 'bg-slate-300 dark:bg-slate-700'
-                      }`}
-                    >
-                      <span
-                        className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
-                          useAiBoost ? '-translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      שאלות מדויקות עם פתרונות מלאים
+                    </div>
                   </div>
-                )
+                  <span className="text-xs font-bold font-mono px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-sky-950/60 text-blue-700 dark:text-sky-300 border border-blue-200 dark:border-sky-800">
+                    {matchingQuestions.length} זמינות
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -437,7 +403,7 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
 
             <button
               type="button"
-              disabled={isGenerating || (matchingQuestions.length === 0 && !isOnline)}
+              disabled={isGenerating || matchingQuestions.length === 0}
               onClick={handleStart}
               className="w-full py-3.5 px-5 rounded-xl bg-blue-600 dark:bg-sky-500 hover:bg-blue-700 dark:hover:bg-sky-400 disabled:opacity-50 text-white dark:text-slate-950 font-semibold text-sm transition-colors flex items-center justify-center gap-2"
             >
@@ -445,8 +411,8 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
                 {isGenerating
                   ? 'מרכיב את המבחן...'
                   : mode === 'exam'
-                  ? `התחלת מבחן (${Math.min(questionCount, Math.max(matchingQuestions.length, isOnline ? questionCount : 0))} שאלות)`
-                  : `התחלת תרגול (${Math.min(questionCount, Math.max(matchingQuestions.length, isOnline ? questionCount : 0))} שאלות)`}
+                  ? `התחלת מבחן (${Math.min(questionCount, matchingQuestions.length)} שאלות)`
+                  : `התחלת תרגול (${Math.min(questionCount, matchingQuestions.length)} שאלות)`}
               </span>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -475,9 +441,9 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
                 {safeSample.gradeName} · {safeSample.topicName} · {DIFFICULTY_LABELS[safeSample.difficulty]}
               </div>
-              <p className="font-semibold text-sm text-slate-900 dark:text-white leading-relaxed">
-                {safeSample.question}
-              </p>
+              <div className="font-semibold text-sm text-slate-900 dark:text-white leading-relaxed">
+                <MathRenderer text={safeSample.question} />
+              </div>
 
               <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs space-y-1.5">
                 <div className="font-semibold text-blue-700 dark:text-sky-400">
@@ -485,15 +451,16 @@ const CustomExamBuilder: React.FC<CustomExamBuilderProps> = ({
                 </div>
                 <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-300">
                   {safeSample.fullSolution.map((step, i) => (
-                    <li key={i}>{step}</li>
+                    <li key={i}>
+                      <MathRenderer text={step} />
+                    </li>
                   ))}
                 </ol>
               </div>
             </div>
           ) : (
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-2xl p-5 text-xs text-amber-900 dark:text-amber-200">
-              לא נמצאו שאלות במאגר המקומי לצירוף המסננים הזה. הרחיבו את טווח הכיתות או התחומים
-              {isOnline ? ', או לחצו על התחלה ליצירת שאלות תואמות אונליין.' : '.'}
+              לא נמצאו שאלות במאגר המקומי לצירוף המסננים הזה. הרחיבו את טווח הכיתות או התחומים.
             </div>
           )}
         </div>
