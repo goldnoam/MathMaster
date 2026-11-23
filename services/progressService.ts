@@ -112,6 +112,8 @@ export const recordLessonStudied = (params: {
   const now = Date.now();
   const activeDateKey = toLocalDateKey(now);
 
+  const existingTime = current.studiedTopics[params.topicId]?.timeSpentSeconds ?? 0;
+
   const record: StudiedTopicRecord = {
     topicId: params.topicId,
     topicName: params.topicName,
@@ -120,6 +122,7 @@ export const recordLessonStudied = (params: {
     category: params.category || 'אלגברה',
     difficulty: params.difficulty,
     lastStudiedAt: now,
+    timeSpentSeconds: existingTime,
   };
 
   const nextDates = Array.from(
@@ -147,6 +150,52 @@ export const recordLessonStudied = (params: {
     newlyUnlocked: evaluation.newlyUnlocked,
     activeDateKey,
   };
+};
+
+export const recordTopicTimeSpent = (params: {
+  topicId: string;
+  topicName: string;
+  gradeId: string;
+  gradeName: string;
+  category?: TopicCategory;
+  difficulty: Difficulty;
+  deltaSeconds: number;
+}): { progress: UserProgressData; updatedRecord: StudiedTopicRecord | null } => {
+  const safeDelta = Math.min(7200, Math.max(0, Math.round(params.deltaSeconds)));
+  const current = loadProgress();
+  if (safeDelta <= 0) {
+    return { progress: current, updatedRecord: null };
+  }
+
+  const now = Date.now();
+  const existing = current.studiedTopics[params.topicId];
+  const prevSeconds =
+    typeof existing?.timeSpentSeconds === 'number' && existing.timeSpentSeconds >= 0
+      ? Math.round(existing.timeSpentSeconds)
+      : 0;
+  const nextSeconds = Math.min(8640000, prevSeconds + safeDelta);
+
+  const record: StudiedTopicRecord = {
+    topicId: params.topicId,
+    topicName: params.topicName || existing?.topicName || 'נושא לימוד',
+    gradeId: params.gradeId || existing?.gradeId || 'grade-9',
+    gradeName: params.gradeName || existing?.gradeName || 'כיתה',
+    category: params.category || existing?.category || 'אלגברה',
+    difficulty: params.difficulty || existing?.difficulty || 'medium',
+    lastStudiedAt: now,
+    timeSpentSeconds: nextSeconds,
+  };
+
+  const updated: UserProgressData = {
+    ...current,
+    studiedTopics: {
+      ...current.studiedTopics,
+      [params.topicId]: record,
+    },
+  };
+
+  saveProgress(updated);
+  return { progress: updated, updatedRecord: record };
 };
 
 export const recordQuizCompleted = (params: {
@@ -228,6 +277,7 @@ export interface CategoryRadarPoint {
   studiedCount: number;
   masteredCount: number;
   quizzesCount: number;
+  timeSpentSeconds: number;
 }
 
 const SHORT_CATEGORY_LABELS: Record<TopicCategory, string> = {
@@ -241,10 +291,52 @@ const SHORT_CATEGORY_LABELS: Record<TopicCategory, string> = {
 
 export const MASTERY_THRESHOLD = 80;
 
+export const formatClockTimer = (totalSeconds: number): string => {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+  if (hours > 0) {
+    return `${hours}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
+};
+
+export const formatDurationHebrew = (totalSeconds?: number): string => {
+  if (typeof totalSeconds !== 'number' || totalSeconds <= 0) return '—';
+  const safe = Math.round(totalSeconds);
+  if (safe < 60) {
+    return `${safe} שנ׳`;
+  }
+  const totalMinutes = Math.floor(safe / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+  if (hours === 0) {
+    return `${totalMinutes} דק׳`;
+  }
+  if (remainingMinutes === 0) {
+    return `${hours} שע׳`;
+  }
+  return `${hours} שע׳ ${remainingMinutes} דק׳`;
+};
+
 export const computeDashboardAnalytics = (progress: UserProgressData) => {
   // Best quiz score per topic
   const bestByTopic: Record<string, number> = {};
   const quizCountByTopic: Record<string, number> = {};
+  const timeSpentByTopic: Record<string, number> = {};
+  let totalTimeSpentSeconds = 0;
+
+  Object.values(progress.studiedTopics).forEach((s) => {
+    const secs =
+      typeof s.timeSpentSeconds === 'number' && s.timeSpentSeconds > 0
+        ? Math.round(s.timeSpentSeconds)
+        : 0;
+    timeSpentByTopic[s.topicId] = secs;
+    totalTimeSpentSeconds += secs;
+  });
 
   progress.completedQuizzes.forEach((q) => {
     quizCountByTopic[q.topicId] = (quizCountByTopic[q.topicId] || 0) + 1;
@@ -276,6 +368,7 @@ export const computeDashboardAnalytics = (progress: UserProgressData) => {
     let scoreSum = 0;
     let quizzedTopicsCount = 0;
     let quizzesCount = 0;
+    let categoryTimeSeconds = 0;
 
     topicsInCategory.forEach((tid) => {
       const isStudied = Boolean(progress.studiedTopics[tid]) || bestByTopic[tid] !== undefined;
@@ -286,6 +379,7 @@ export const computeDashboardAnalytics = (progress: UserProgressData) => {
         quizzedTopicsCount += 1;
       }
       quizzesCount += quizCountByTopic[tid] || 0;
+      categoryTimeSeconds += timeSpentByTopic[tid] || 0;
     });
 
     const masteryScore = quizzedTopicsCount > 0 ? Math.round(scoreSum / quizzedTopicsCount) : 0;
@@ -300,6 +394,7 @@ export const computeDashboardAnalytics = (progress: UserProgressData) => {
       studiedCount,
       masteredCount,
       quizzesCount,
+      timeSpentSeconds: categoryTimeSeconds,
     };
   });
 
@@ -317,6 +412,8 @@ export const computeDashboardAnalytics = (progress: UserProgressData) => {
     masteredTopicIds,
     bestByTopic,
     quizCountByTopic,
+    timeSpentByTopic,
+    totalTimeSpentSeconds,
     masteredCount: masteredTopicIds.size,
     studiedCount: Object.keys(progress.studiedTopics).length,
     totalCurriculumTopics,

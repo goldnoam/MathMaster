@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppView, DashboardSection, UserAccountProfile } from '../types.ts';
 import Breadcrumbs from './Breadcrumbs.tsx';
 
@@ -41,12 +41,31 @@ const Navigation: React.FC<NavigationProps> = ({
   toggleTheme,
   isOnline,
 }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [mobileMenuOpen]);
+
   const isDashboard = currentView === AppView.DASHBOARD;
   const isOverviewActive = isDashboard && activeDashboardSection === 'overview';
   const isAchievementsActive = isDashboard && activeDashboardSection === 'achievements';
   const isPlannerActive = isDashboard && activeDashboardSection === 'planner';
   const isCustomExamActive = currentView === AppView.CUSTOM_EXAM;
   const isVisualLabActive = currentView === AppView.VISUAL_LAB;
+
+  const handleMobileAction = (fn: () => void) => {
+    setMobileMenuOpen(false);
+    fn();
+  };
 
   return (
     <header className="sticky top-0 z-40 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors duration-200">
@@ -220,6 +239,74 @@ const Navigation: React.FC<NavigationProps> = ({
               </svg>
             )}
           </button>
+
+          {/* Compact Navigation Dropdown for Mobile/Tablet (< lg) */}
+          <div className="relative lg:hidden" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              aria-expanded={mobileMenuOpen}
+              aria-label="תפריט ניווט נוסף"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+
+            {mobileMenuOpen && (
+              <div className="absolute left-0 top-11 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-1.5 z-50 animate-fadeIn">
+                <button
+                  type="button"
+                  onClick={() => handleMobileAction(onCustomExamClick)}
+                  className={`w-full text-right px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    isCustomExamActive
+                      ? 'bg-blue-50 dark:bg-sky-950/50 text-blue-600 dark:text-sky-400 font-semibold'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  מחולל מבחנים
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMobileAction(onVisualLabClick)}
+                  className={`w-full text-right px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    isVisualLabActive
+                      ? 'bg-blue-50 dark:bg-sky-950/50 text-blue-600 dark:text-sky-400 font-semibold'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  מעבדה ויזואלית
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMobileAction(onPlannerClick)}
+                  className={`w-full text-right px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    isPlannerActive
+                      ? 'bg-blue-50 dark:bg-sky-950/50 text-blue-600 dark:text-sky-400 font-semibold'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  תכנית שבועית
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMobileAction(onAchievementsClick)}
+                  className={`w-full text-right px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    isAchievementsActive
+                      ? 'bg-blue-50 dark:bg-sky-950/50 text-blue-600 dark:text-sky-400 font-semibold'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  הישגים ותגים
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

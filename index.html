@@ -45,9 +45,20 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            try {
+              if (sessionStorage.getItem('sw_reloaded_v5')) return;
+              sessionStorage.setItem('sw_reloaded_v5', '1');
+            } catch (e) {}
+            refreshing = true;
+            window.location.reload();
+          });
+
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
             .then(registration => {
-              console.log('SW registered: ', registration);
+              registration.update().catch(() => {});
             })
             .catch(registrationError => {
               console.log('SW registration failed: ', registrationError);

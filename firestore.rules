@@ -100,7 +100,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'userId', 'topicId', 'topicName', 'gradeId', 'gradeName',
-          'category', 'difficulty', 'lastStudiedAt', 'createdAt', 'updatedAt'
+          'category', 'difficulty', 'lastStudiedAt', 'timeSpentSeconds', 'createdAt', 'updatedAt'
         ])
         && data.userId is string
         && data.userId.size() >= 1 && data.userId.size() <= 128
@@ -119,6 +119,7 @@ service cloud.firestore {
         && isValidDifficulty(data.difficulty)
         && data.lastStudiedAt is number
         && data.lastStudiedAt > 0
+        && (!('timeSpentSeconds' in data) || (data.timeSpentSeconds is int && data.timeSpentSeconds >= 0 && data.timeSpentSeconds <= 8640000))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -308,7 +309,8 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly([
-            'topicName', 'gradeId', 'gradeName', 'category', 'difficulty', 'lastStudiedAt', 'updatedAt'
+            'topicName', 'gradeId', 'gradeName', 'category', 'difficulty',
+            'lastStudiedAt', 'timeSpentSeconds', 'updatedAt'
           ]);
 
         allow delete: if isVerifiedUser()

@@ -152,6 +152,10 @@ export const loadOrCreateUserCloudState = async (
     studiedEntries.forEach((topic) => {
       const safeTopicId = sanitizeId(topic.topicId, 64);
       const ref = doc(db, 'users', uid, 'studiedTopics', safeTopicId);
+      const safeTimeSeconds = Math.min(
+        8640000,
+        Math.max(0, Math.round(topic.timeSpentSeconds || 0))
+      );
       batch.set(ref, {
         userId: uid,
         topicId: safeTopicId,
@@ -161,6 +165,7 @@ export const loadOrCreateUserCloudState = async (
         category: sanitizeText(topic.category, 60, 'אלגברה'),
         difficulty: sanitizeDifficulty(topic.difficulty),
         lastStudiedAt: topic.lastStudiedAt || Date.now(),
+        timeSpentSeconds: safeTimeSeconds,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -291,6 +296,10 @@ export const loadOrCreateUserCloudState = async (
       category: data.category as TopicCategory,
       difficulty: data.difficulty as Difficulty,
       lastStudiedAt: data.lastStudiedAt,
+      timeSpentSeconds:
+        typeof data.timeSpentSeconds === 'number' && data.timeSpentSeconds >= 0
+          ? Math.round(data.timeSpentSeconds)
+          : 0,
     };
   });
 
@@ -499,10 +508,21 @@ export const syncStudiedTopicToCloud = async (
 ): Promise<void> => {
   const safeTopicId = sanitizeId(record.topicId, 64);
   const ref = doc(db, 'users', uid, 'studiedTopics', safeTopicId);
+  const localTime = Math.min(
+    8640000,
+    Math.max(0, Math.round(record.timeSpentSeconds || 0))
+  );
 
   try {
     const existing = await getDoc(ref);
     if (existing.exists()) {
+      const existingData = existing.data();
+      const cloudTime =
+        typeof existingData.timeSpentSeconds === 'number' && existingData.timeSpentSeconds >= 0
+          ? Math.round(existingData.timeSpentSeconds)
+          : 0;
+      const safeTimeSeconds = Math.min(8640000, Math.max(cloudTime, localTime));
+
       await updateDoc(ref, {
         topicName: sanitizeText(record.topicName, 120, 'נושא לימוד'),
         gradeId: sanitizeQuizGradeId(record.gradeId),
@@ -510,6 +530,7 @@ export const syncStudiedTopicToCloud = async (
         category: sanitizeText(record.category, 60, 'אלגברה'),
         difficulty: sanitizeDifficulty(record.difficulty),
         lastStudiedAt: record.lastStudiedAt || Date.now(),
+        timeSpentSeconds: safeTimeSeconds,
         updatedAt: serverTimestamp(),
       });
     } else {
@@ -522,6 +543,7 @@ export const syncStudiedTopicToCloud = async (
         category: sanitizeText(record.category, 60, 'אלגברה'),
         difficulty: sanitizeDifficulty(record.difficulty),
         lastStudiedAt: record.lastStudiedAt || Date.now(),
+        timeSpentSeconds: localTime,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

@@ -1,6 +1,6 @@
 {
   "name": "MathMaster IL",
-  "description": "An AI-powered math tutor for grades 1-12 in Hebrew, featuring dynamic lessons and interactive quizzes.",
+  "description": "Interactive math learning platform for grades 1-12 in Hebrew, featuring guided lessons, LaTeX formulas, visual simulations, and adaptive quizzes.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

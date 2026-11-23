@@ -1,59 +1,19 @@
-// Service Worker for Offline Access
-const CACHE_NAME = 'mathmaster-v1';
+// Service Worker for Offline Access with Network-First Freshness
+const CACHE_NAME = 'mathmaster-v5';
 
-// Assets to cache immediately
+// Safe app-shell routes that exist in both Vite dev and production builds
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/index.css',
-  '/index.tsx',
-  '/App.tsx',
-  '/types.ts',
-  '/constants.ts',
-  '/firebase.ts',
-  '/data/staticCurriculum.ts',
-  '/data/questionBank.ts',
-  '/services/storageService.ts',
-  '/services/progressService.ts',
-  '/services/studyPlanService.ts',
-  '/services/achievementService.ts',
-  '/services/firebaseUserService.ts',
-  '/components/Navigation.tsx',
-  '/components/Breadcrumbs.tsx',
-  '/components/Footer.tsx',
-  '/components/GradeSelector.tsx',
-  '/components/TopicSelector.tsx',
-  '/components/TopicGlyph.tsx',
-  '/components/LessonView.tsx',
-  '/components/QuizView.tsx',
-  '/components/DashboardView.tsx',
-  '/components/StudyPlannerPanel.tsx',
-  '/components/AchievementBadgeIcon.tsx',
-  '/components/AchievementsPanel.tsx',
-  '/components/AchievementToast.tsx',
-  '/components/CustomExamBuilder.tsx',
-  '/components/VisualLabView.tsx',
-  '/components/AuthModal.tsx',
-  '/components/ErrorBoundary.tsx',
-  '/components/widgets/MathVisualWidget.tsx',
-  '/components/MathRenderer.tsx',
-  '/components/LoadingSpinner.tsx',
-  // External CDNs used in index.html and import map
-  'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rubik:wght@500;600;700;800&display=swap',
-  // Critical dependencies for offline functionality
-  'https://aistudiocdn.com/react@^19.2.0',
-  'https://aistudiocdn.com/react-dom@^19.2.0',
-  'https://aistudiocdn.com/react-markdown@^10.1.0'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('SW: Caching App Shell');
-      return cache.addAll(PRECACHE_ASSETS).catch(err => {
-          console.warn('SW: Failed to cache some assets', err);
-      });
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.allSettled(
+        PRECACHE_ASSETS.map((asset) => cache.add(asset))
+      );
     })
   );
   self.skipWaiting();
@@ -61,53 +21,79 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
+    caches.keys().then((cacheNames) =>
+      Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log('SW: Clearing old cache');
             return caches.delete(cacheName);
           }
+          return Promise.resolve(false);
         })
-      );
-    })
+      )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  // Strategy: Stale-While-Revalidate for most things, or Cache First
-  // For simplicity and offline priority: Cache First, then Network
-  
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        // Don't cache API calls or bad responses
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          // Check if it's an external CDN (type 'cors') that we want to cache
-          if (networkResponse.type === 'cors' && 
-             (event.request.url.includes('cdn.tailwindcss') || 
-              event.request.url.includes('fonts.googleapis') || 
-              event.request.url.includes('fonts.gstatic') ||
-              event.request.url.includes('aistudiocdn'))) {
-             // continue to cache
-          } else {
-             return networkResponse;
-          }
-        }
+  const url = new URL(event.request.url);
 
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+  // Never intercept or cache the service worker script itself
+  if (url.origin === self.location.origin && url.pathname === '/sw.js') {
+    return;
+  }
+
+  // Same-origin app shell, scripts, styles, and navigation: Network-First
+  // Ensures updated lessons, exercises, and UI changes appear immediately online,
+  // while still falling back to the cached copy when offline.
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          return new Response('', { status: 503, statusText: 'Offline' });
+        })
+    );
+    return;
+  }
+
+  // External static CDNs (fonts, Tailwind, importmap dependencies): Cache-First with network fill
+  const isCacheableCdn =
+    url.hostname.includes('cdn.tailwindcss.com') ||
+    url.hostname.includes('fonts.googleapis.com') ||
+    url.hostname.includes('fonts.gstatic.com') ||
+    url.hostname.includes('aistudiocdn.com');
+
+  if (isCacheableCdn) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
         });
-        return networkResponse;
-      });
-    })
-  );
+      })
+    );
+  }
 });

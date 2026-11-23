@@ -24,9 +24,11 @@ import { CURRICULUM } from '../constants.ts';
 import {
   CategoryRadarPoint,
   computeDashboardAnalytics,
+  formatDurationHebrew,
   MASTERY_THRESHOLD,
 } from '../services/progressService.ts';
 import { evaluateAchievements } from '../services/achievementService.ts';
+import { generateNextStepsRecommendations } from '../services/recommendationService.ts';
 import TopicGlyph from './TopicGlyph.tsx';
 import StudyPlannerPanel from './StudyPlannerPanel.tsx';
 import AchievementsPanel from './AchievementsPanel.tsx';
@@ -91,6 +93,14 @@ const CustomRadarTooltip: React.FC<{
             {data.quizzesCount}
           </span>
         </div>
+        {data.timeSpentSeconds > 0 && (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-slate-500 dark:text-slate-400">זמן למידה:</span>
+            <span className="font-mono tabular-nums font-semibold text-slate-800 dark:text-slate-200">
+              {formatDurationHebrew(data.timeSpentSeconds)}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -142,6 +152,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({
 
   const analytics = useMemo(() => computeDashboardAnalytics(progress), [progress]);
   const achievementSummary = useMemo(() => evaluateAchievements(progress), [progress]);
+  const nextSteps = useMemo(
+    () => generateNextStepsRecommendations(progress, account?.gradeId, 3),
+    [progress, account?.gradeId]
+  );
 
   const hasAnyActivity =
     progress.completedQuizzes.length > 0 || Object.keys(progress.studiedTopics).length > 0;
@@ -158,6 +172,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
         category: TopicCategory;
         bestScore: number | null;
         quizzesCount: number;
+        timeSpentSeconds: number;
         isMastered: boolean;
         lastActivityAt: number;
       }
@@ -172,6 +187,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
         category: s.category,
         bestScore: analytics.bestByTopic[s.topicId] ?? null,
         quizzesCount: analytics.quizCountByTopic[s.topicId] || 0,
+        timeSpentSeconds: s.timeSpentSeconds || 0,
         isMastered: analytics.masteredTopicIds.has(s.topicId),
         lastActivityAt: s.lastStudiedAt,
       });
@@ -188,6 +204,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
           category: q.category,
           bestScore: analytics.bestByTopic[q.topicId] ?? q.percentage,
           quizzesCount: analytics.quizCountByTopic[q.topicId] || 1,
+          timeSpentSeconds: analytics.timeSpentByTopic[q.topicId] || 0,
           isMastered: analytics.masteredTopicIds.has(q.topicId),
           lastActivityAt: q.completedAt,
         });
@@ -387,8 +404,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({
         />
       ) : (
         <>
-      {/* 4-Column KPI Summary Strip */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" aria-label="מדדי התקדמות עיקריים">
+      {/* 5-Column KPI Summary Strip */}
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6" aria-label="מדדי התקדמות עיקריים">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
           <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
             נושאים שנשלטו
@@ -419,6 +436,20 @@ const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
           <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+            זמן למידה מצטבר
+          </div>
+          <div className="font-mono tabular-nums text-2xl md:text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+            {formatDurationHebrew(analytics.totalTimeSpentSeconds)}
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+            {analytics.totalTimeSpentSeconds > 0
+              ? `ב-${Object.values(analytics.timeSpentByTopic).filter((s) => s > 0).length} נושאים פעילים`
+              : 'נמדד אוטומטית בזמן שיעור'}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
+          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
             ממוצע ציונים
           </div>
           <div className="font-mono tabular-nums text-2xl md:text-3xl font-bold text-blue-600 dark:text-sky-400">
@@ -429,7 +460,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
+        <div className="col-span-2 md:col-span-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
           <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
             ניקוד תרגול מצטבר
           </div>
@@ -500,6 +531,103 @@ const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       </section>
+
+      {/* Next Steps Recommendation Engine */}
+      {nextSteps.recommendations.length > 0 && (
+        <section
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 mb-6"
+          aria-label="הצעדים הבאים המומלצים"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h2 className="font-display text-lg md:text-xl font-bold text-slate-900 dark:text-white">
+                הצעדים הבאים שלך · המלצות למידה אישיות
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {nextSteps.insightSummary}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSection('planner')}
+              className="text-xs font-semibold text-blue-600 dark:text-sky-400 hover:underline self-start md:self-center shrink-0"
+            >
+              לתכנית הלימוד השבועית
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {nextSteps.recommendations.map((rec) => {
+              const reasonAccent =
+                rec.reasonType === 'reinforce'
+                  ? 'text-amber-700 dark:text-amber-400'
+                  : rec.reasonType === 'complete_quiz'
+                  ? 'text-blue-600 dark:text-sky-400'
+                  : rec.reasonType === 'weak_domain'
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : 'text-emerald-600 dark:text-emerald-400';
+
+              return (
+                <div
+                  key={rec.topic.id}
+                  className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-950/40 flex flex-col justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 text-xs mb-3">
+                      <span className={`font-semibold ${reasonAccent}`}>
+                        {rec.reasonLabel}
+                      </span>
+                      {rec.bestScore !== null ? (
+                        <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                          שיא {rec.bestScore}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500">
+                          {rec.grade.name}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-start gap-3 mb-2.5">
+                      <TopicGlyph topicId={rec.topic.id} size="sm" />
+                      <div className="min-w-0">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {rec.grade.name} · {rec.topic.category || 'אלגברה'}
+                        </div>
+                        <h3 className="font-display font-bold text-sm md:text-base text-slate-900 dark:text-white leading-snug">
+                          {rec.topic.name}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {rec.reasonText}
+                    </p>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      רמה: <strong className="text-slate-700 dark:text-slate-200">{DIFFICULTY_LABELS[rec.recommendedDifficulty]}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenTopic(rec.grade, rec.topic, rec.recommendedDifficulty)
+                      }
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 dark:bg-sky-500 hover:bg-blue-700 dark:hover:bg-sky-400 text-white dark:text-slate-950 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 shrink-0"
+                    >
+                      <span>{rec.ctaLabel}</span>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Main 2-Column Split: Radar Chart + Domain Breakdown Table */}
       <section className="grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-6 mb-8 items-stretch">
@@ -641,6 +769,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                       <span className="font-mono tabular-nums text-xs text-slate-500 dark:text-slate-400 shrink-0">
                         {item.masteredCount}/{item.totalTopics} נשלטו
+                        {item.timeSpentSeconds > 0
+                          ? ` · ${formatDurationHebrew(item.timeSpentSeconds)}`
+                          : ''}
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -838,6 +969,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-500 dark:text-slate-400">
                   <th className="py-3 pl-4 font-medium">נושא לימוד</th>
                   <th className="py-3 px-3 font-medium">כיתה ותחום</th>
+                  <th className="py-3 px-3 font-medium">זמן למידה</th>
                   <th className="py-3 px-3 font-medium">ציון שיא</th>
                   <th className="py-3 px-3 font-medium">מבחנים</th>
                   <th className="py-3 pr-3 font-medium text-left">סטטוס שליטה</th>
@@ -861,6 +993,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                     </td>
                     <td className="py-3 px-3 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {item.gradeName} · {item.category}
+                    </td>
+                    <td className="py-3 px-3 font-mono tabular-nums text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      {formatDurationHebrew(item.timeSpentSeconds)}
                     </td>
                     <td className="py-3 px-3 font-mono tabular-nums font-semibold whitespace-nowrap">
                       {item.bestScore !== null ? `${item.bestScore}%` : '—'}

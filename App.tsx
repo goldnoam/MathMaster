@@ -30,6 +30,7 @@ import {
   loadProgress,
   saveProgress,
   recordLessonStudied,
+  recordTopicTimeSpent,
   recordQuizCompleted,
   resetUserProgress,
 } from './services/progressService.ts';
@@ -138,7 +139,7 @@ const App: React.FC = () => {
 
   const [lessonContent, setLessonContent] = useState<string>('');
   const [lessonKeywords, setLessonKeywords] = useState<Record<string, string>>({});
-  const [lessonSource, setLessonSource] = useState<'ai' | 'static' | 'cache' | undefined>(undefined);
+  const [lessonSource, setLessonSource] = useState<'static' | 'cache' | undefined>(undefined);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [activeCustomExam, setActiveCustomExam] = useState<CustomExamConfig | null>(null);
 
@@ -309,6 +310,31 @@ const App: React.FC = () => {
       }
     },
     [account]
+  );
+
+  const handleRecordLessonTime = useCallback(
+    (deltaSeconds: number) => {
+      if (!selectedGrade || !selectedTopic || deltaSeconds <= 0) return;
+
+      const { progress: updated, updatedRecord } = recordTopicTimeSpent({
+        topicId: selectedTopic.id,
+        topicName: selectedTopic.name,
+        gradeId: selectedGrade.id,
+        gradeName: selectedGrade.name,
+        category: selectedTopic.category,
+        difficulty: selectedDifficulty,
+        deltaSeconds,
+      });
+
+      setProgress(updated);
+
+      if (account && updatedRecord) {
+        syncStudiedTopicToCloud(account.uid, updatedRecord).catch((err) =>
+          console.warn('Cloud time spent sync warning:', err)
+        );
+      }
+    },
+    [selectedGrade, selectedTopic, selectedDifficulty, account]
   );
 
   const handleStartQuiz = useCallback(async () => {
@@ -558,6 +584,7 @@ const App: React.FC = () => {
                 onSelectDirectTopic={handleDirectTopicSelect}
                 onOpenCustomExam={handleCustomExamClick}
                 onOpenVisualLab={handleVisualLabClick}
+                progress={progress}
               />
             )}
 
@@ -566,6 +593,7 @@ const App: React.FC = () => {
                 grade={selectedGrade}
                 onSelectTopic={handleTopicSelect}
                 onBack={handleBackToGrades}
+                progress={progress}
               />
             )}
 
@@ -576,9 +604,17 @@ const App: React.FC = () => {
                 onStartQuiz={handleStartQuiz}
                 onBack={handleBackToTopics}
                 onOpenVisualLab={handleVisualLabClick}
+                onRecordTimeSpent={handleRecordLessonTime}
+                totalTopicTimeSeconds={
+                  progress.studiedTopics[selectedTopic.id]?.timeSpentSeconds ?? 0
+                }
                 isLoading={isLoading}
                 contentSource={lessonSource}
                 difficulty={selectedDifficulty}
+                topicId={selectedTopic.id}
+                topicName={selectedTopic.name}
+                topicCategory={selectedTopic.category}
+                gradeName={selectedGrade?.name}
               />
             )}
 

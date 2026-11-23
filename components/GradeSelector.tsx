@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { GradeLevel, Topic, TopicCategory } from '../types.ts';
+import { GradeLevel, Topic, TopicCategory, UserProgressData } from '../types.ts';
 import { CURRICULUM } from '../constants.ts';
 import TopicGlyph from './TopicGlyph.tsx';
 
@@ -8,6 +8,7 @@ interface GradeSelectorProps {
   onSelectDirectTopic?: (grade: GradeLevel, topic: Topic) => void;
   onOpenCustomExam?: () => void;
   onOpenVisualLab?: () => void;
+  progress?: UserProgressData;
 }
 
 const CATEGORIES: { id: TopicCategory | 'הכל'; name: string }[] = [
@@ -22,6 +23,33 @@ const CATEGORIES: { id: TopicCategory | 'הכל'; name: string }[] = [
 
 type SchoolStage = 'all' | 'elementary' | 'middle' | 'high';
 
+const FEATURED_TOPIC_SPECS: {
+  gradeId: string;
+  topicId: string;
+  subtitle: string;
+}[] = [
+  {
+    gradeId: 'grade-9',
+    topicId: 'g9-factoring',
+    subtitle: 'גורם משותף, טרינום פשוט ומתקדם',
+  },
+  {
+    gradeId: 'grade-9',
+    topicId: 'g9-quadratic',
+    subtitle: 'קודקוד הפרבולה, דיסקרימיננטה ושורשים',
+  },
+  {
+    gradeId: 'grade-4',
+    topicId: 'g4-fractions',
+    subtitle: 'מונה, מכנה, הרחבה והמחשה ויזואלית',
+  },
+  {
+    gradeId: 'grade-11',
+    topicId: 'g11-calculus',
+    subtitle: 'שיפוע משיק, כללי גזירה ונקודות קיצון',
+  },
+];
+
 const getStageInfo = (gradeId: string): { stage: Exclude<SchoolStage, 'all'>; label: string; number: string } => {
   const num = parseInt(gradeId.replace('grade-', ''), 10);
   const padded = num < 10 ? `0${num}` : `${num}`;
@@ -35,11 +63,38 @@ const GradeSelector: React.FC<GradeSelectorProps> = ({
   onSelectDirectTopic,
   onOpenCustomExam,
   onOpenVisualLab,
+  progress,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TopicCategory | 'הכל'>('הכל');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
   const [selectedStage, setSelectedStage] = useState<SchoolStage>('all');
+
+  const featuredTopics = useMemo(() => {
+    return FEATURED_TOPIC_SPECS.map((spec) => {
+      const grade = CURRICULUM.find((g) => g.id === spec.gradeId);
+      const topic = grade?.topics.find((t) => t.id === spec.topicId);
+      if (!grade || !topic) return null;
+      return { grade, topic, subtitle: spec.subtitle };
+    }).filter((item): item is { grade: GradeLevel; topic: Topic; subtitle: string } => item !== null);
+  }, []);
+
+  const gradeCompletionMap = useMemo(() => {
+    const map: Record<string, { completed: number; total: number; percent: number }> = {};
+    const studiedIds = new Set(Object.keys(progress?.studiedTopics || {}));
+    const quizzedIds = new Set((progress?.completedQuizzes || []).map((q) => q.topicId));
+
+    CURRICULUM.forEach((grade) => {
+      const total = grade.topics.length;
+      const completed = grade.topics.filter(
+        (t) => studiedIds.has(t.id) || quizzedIds.has(t.id)
+      ).length;
+      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+      map[grade.id] = { completed, total, percent };
+    });
+
+    return map;
+  }, [progress]);
 
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -99,7 +154,7 @@ const GradeSelector: React.FC<GradeSelectorProps> = ({
               מתמטיקה ברורה, צעד אחר צעד
             </h1>
             <p className="text-slate-600 dark:text-slate-300 text-base leading-relaxed max-w-xl mb-6">
-              שיעורים אינטראקטיביים, פתרונות מודרכים ותרגול אדפטיבי המותאם לרמת ההבנה שלך — זמינים גם בלמידה מקוונת וגם במצב אופליין.
+              שיעורים אינטראקטיביים עם נוסחאות LaTeX, הדגמות ויזואליות, הקראה קולית בעברית ומאגר תרגול מלא לכל הכיתות.
             </p>
           </div>
 
@@ -142,9 +197,11 @@ const GradeSelector: React.FC<GradeSelectorProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>{CURRICULUM.length} שכבות גיל</span>
+              <span className="tabular-nums">{CURRICULUM.length} שכבות גיל</span>
               <span aria-hidden="true">·</span>
-              <span>{CURRICULUM.reduce((acc, g) => acc + g.topics.length, 0)} נושאי לימוד</span>
+              <span className="tabular-nums">
+                {CURRICULUM.reduce((acc, g) => acc + g.topics.length, 0)} נושאי לימוד מלאים
+              </span>
               <span aria-hidden="true">·</span>
               <span>מאגר שאלות עם פתרונות מלאים</span>
             </div>
@@ -300,7 +357,7 @@ const GradeSelector: React.FC<GradeSelectorProps> = ({
         </div>
       </section>
 
-      {/* Search / Filter Results OR Grade Directory */}
+      {/* Search / Filter Results OR Featured + Grade Directory */}
       {isFiltering ? (
         <section className="animate-fadeIn">
           <div className="flex items-center justify-between mb-5">
@@ -364,84 +421,152 @@ const GradeSelector: React.FC<GradeSelectorProps> = ({
           )}
         </section>
       ) : (
-        <section>
-          {/* Stage Selector Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div>
-              <h2 className="font-display text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
-                בחירת כיתה לפי שכבת לימוד
-              </h2>
+        <div className="space-y-10">
+          {/* Quick-Start Core Lessons Strip */}
+          {featuredTopics.length > 0 && onSelectDirectTopic && (
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-lg md:text-xl font-bold text-slate-900 dark:text-white">
+                  נושאי מפתח להתחלה מהירה
+                </h2>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  גישה ישירה לשיעור ותרגול
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {featuredTopics.map(({ grade, topic, subtitle }) => (
+                  <button
+                    key={topic.id}
+                    type="button"
+                    onClick={() => onSelectDirectTopic(grade, topic)}
+                    className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-sky-400 rounded-xl p-4 text-right transition-all duration-150 hover:shadow-md flex flex-col justify-between gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  >
+                    <div className="flex items-start gap-3">
+                      <TopicGlyph topicId={topic.id} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] font-medium text-blue-600 dark:text-sky-400 mb-0.5">
+                          {grade.name}
+                        </div>
+                        <h3 className="font-display font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-sky-400 transition-colors leading-snug">
+                          {topic.name}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+                          {subtitle}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Grade Directory */}
+          <section>
+            {/* Stage Selector Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="font-display text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
+                  בחירת כיתה לפי שכבת לימוד
+                </h2>
+              </div>
+
+              <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl self-start">
+                {(
+                  [
+                    { id: 'all', label: 'הכל' },
+                    { id: 'elementary', label: 'יסודי (א׳–ו׳)' },
+                    { id: 'middle', label: 'חטיבה (ז׳–ט׳)' },
+                    { id: 'high', label: 'תיכון (י׳–י״ב)' },
+                  ] as { id: SchoolStage; label: string }[]
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setSelectedStage(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                      selectedStage === tab.id
+                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl self-start">
-              {(
-                [
-                  { id: 'all', label: 'הכל' },
-                  { id: 'elementary', label: 'יסודי (א׳–ו׳)' },
-                  { id: 'middle', label: 'חטיבה (ז׳–ט׳)' },
-                  { id: 'high', label: 'תיכון (י׳–י״ב)' },
-                ] as { id: SchoolStage; label: string }[]
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setSelectedStage(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                    selectedStage === tab.id
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
+            {/* Clean 4-Column Academic Grade Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {filteredGrades.map((grade) => {
+                const info = getStageInfo(grade.id);
+                const completion = gradeCompletionMap[grade.id] || {
+                  completed: 0,
+                  total: grade.topics.length,
+                  percent: 0,
+                };
 
-          {/* Clean 4-Column Academic Grade Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredGrades.map((grade) => {
-              const info = getStageInfo(grade.id);
-              return (
-                <button
-                  key={grade.id}
-                  type="button"
-                  onClick={() => onSelectGrade(grade)}
-                  className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-sky-400 rounded-xl p-5 text-right transition-all duration-150 hover:shadow-md flex flex-col justify-between min-h-[196px] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                >
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-3">
-                      <span>{info.label}</span>
-                      <span className="font-mono tabular-nums font-semibold text-slate-400 dark:text-slate-500">
-                        {info.number}
-                      </span>
+                return (
+                  <button
+                    key={grade.id}
+                    type="button"
+                    onClick={() => onSelectGrade(grade)}
+                    className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-sky-400 rounded-xl p-5 text-right transition-all duration-150 hover:shadow-md flex flex-col justify-between min-h-[208px] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-3">
+                        <span>{info.label}</span>
+                        <span className="font-mono tabular-nums font-semibold text-slate-400 dark:text-slate-500">
+                          {info.number}
+                        </span>
+                      </div>
+
+                      <h3 className="font-display text-2xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-blue-600 dark:group-hover:text-sky-400 transition-colors">
+                        {grade.name}
+                      </h3>
+
+                      <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                        {grade.topics.slice(0, 3).map((topic) => (
+                          <li key={topic.id} className="truncate flex items-center gap-1.5">
+                            <span className="text-slate-400 dark:text-slate-600 select-none">•</span>
+                            <span className="truncate">{topic.name}</span>
+                          </li>
+                        ))}
+                        {grade.topics.length > 3 && (
+                          <li className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
+                            + עוד {grade.topics.length - 3} נושאים
+                          </li>
+                        )}
+                      </ul>
                     </div>
 
-                    <h3 className="font-display text-2xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-blue-600 dark:group-hover:text-sky-400 transition-colors">
-                      {grade.name}
-                    </h3>
-
-                    <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                      {grade.topics.map((topic) => (
-                        <li key={topic.id} className="truncate flex items-center gap-1.5">
-                          <span className="text-slate-400 dark:text-slate-600 select-none">•</span>
-                          <span className="truncate">{topic.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-sky-400">
-                    <span className="tabular-nums">{grade.topics.length} נושאי לימוד</span>
-                    <svg className="w-4 h-4 transition-transform duration-150 group-hover:-translate-x-1" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+                    <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                      {progress && completion.completed > 0 && (
+                        <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-600 dark:bg-sky-400 transition-all duration-300"
+                            style={{ width: `${completion.percent}%` }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-sky-400">
+                        <span className="tabular-nums">
+                          {progress && completion.completed > 0
+                            ? `${completion.completed}/${completion.total} הושלמו`
+                            : `${grade.topics.length} נושאי לימוד`}
+                        </span>
+                        <svg className="w-4 h-4 transition-transform duration-150 group-hover:-translate-x-1" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

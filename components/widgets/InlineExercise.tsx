@@ -10,9 +10,17 @@ const InlineExercise: React.FC<InlineExerciseProps> = ({ question, answer }) => 
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
 
+  const normalizeExpr = (str: string) =>
+    str
+      .trim()
+      .replace(/−/g, '-')
+      .replace(/\s+/g, '');
+
   const checkAnswer = () => {
     if (!input.trim()) return;
-    if (input.trim().replace(/\s+/g, '') === answer.trim().replace(/\s+/g, '')) {
+    const userNorm = normalizeExpr(input);
+    const acceptedAnswers = answer.split(';;').map(normalizeExpr).filter(Boolean);
+    if (acceptedAnswers.includes(userNorm)) {
       setStatus('correct');
     } else {
       setStatus('incorrect');
@@ -45,7 +53,7 @@ const InlineExercise: React.FC<InlineExerciseProps> = ({ question, answer }) => 
             }}
             onKeyDown={handleKeyDown}
             placeholder="תשובה"
-            className="w-28 h-10 px-3 text-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-blue-600 dark:focus:ring-sky-400 focus:border-transparent outline-none"
+            className="w-36 sm:w-44 h-10 px-3 text-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-blue-600 dark:focus:ring-sky-400 focus:border-transparent outline-none"
             dir="ltr"
           />
           <button

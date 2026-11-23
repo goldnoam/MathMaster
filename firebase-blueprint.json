@@ -125,6 +125,10 @@
           "type": "number",
           "description": "Client epoch milliseconds timestamp when last studied."
         },
+        "timeSpentSeconds": {
+          "type": "integer",
+          "description": "Cumulative active study duration in seconds spent on this topic."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

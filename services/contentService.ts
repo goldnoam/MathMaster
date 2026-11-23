@@ -18,7 +18,24 @@ export const getLessonContent = async (
   topicName: string,
   difficulty: Difficulty
 ): Promise<ContentResult> => {
-  // 1. Try Cache
+  // 1. Always prefer the fresh bundled curriculum database so lesson updates appear immediately
+  await delay(80);
+  const gradeData = STATIC_DATA_DB[gradeId];
+  const topicData = gradeData?.topics[topicId];
+
+  if (topicData) {
+    const result = {
+      markdown: topicData.lesson.markdown,
+      keywords: topicData.lesson.keywords
+    };
+    saveToCache('lesson', gradeId, topicId, difficulty, result);
+    return {
+      ...result,
+      source: 'static'
+    };
+  }
+
+  // 2. Fallback to offline local cache if topic is missing from static bundle
   const cached = loadFromCache<{ markdown: string; keywords: Record<string, string> }>('lesson', gradeId, topicId, difficulty);
   if (cached) {
     return {
@@ -27,37 +44,18 @@ export const getLessonContent = async (
     };
   }
 
-  // 2. Load from curated curriculum database
-  await delay(120);
-  const gradeData = STATIC_DATA_DB[gradeId];
-  const topicData = gradeData?.topics[topicId];
-
-  if (!topicData) {
-    const fallback = {
-      markdown: `
+  const fallback = {
+    markdown: `
 ## שיעור בנושא: ${topicName}
 התוכן בנושא זה נערך ומתעדכן במערכת. מומלץ לבחור באחד מנושאי הליבה המורחבים בכיתה זו.
 
 ### מחשבון לתרגול:
 \`\`\`calculator
 \`\`\`
-      `,
-      keywords: {}
-    };
-    return { ...fallback, source: 'static' };
-  }
-
-  const markdown = topicData.lesson.markdown;
-  const result = {
-    markdown,
-    keywords: topicData.lesson.keywords
+    `,
+    keywords: {}
   };
-
-  saveToCache('lesson', gradeId, topicId, difficulty, result);
-  return {
-    ...result,
-    source: 'static'
-  };
+  return { ...fallback, source: 'static' };
 };
 
 export const getQuizContent = async (
@@ -67,19 +65,34 @@ export const getQuizContent = async (
   topicName: string,
   difficulty: Difficulty
 ): Promise<QuizQuestion[]> => {
-  // 1. Try Cache
-  const cached = loadFromCache<QuizQuestion[]>('quiz', gradeId, topicId, difficulty);
-  if (cached && cached.length > 0) {
-    return cached;
-  }
-
-  await delay(120);
+  await delay(80);
   const gradeData = STATIC_DATA_DB[gradeId];
   const topicData = gradeData?.topics[topicId];
 
   if (topicData?.quiz && topicData.quiz.length > 0) {
-    saveToCache('quiz', gradeId, topicId, difficulty, topicData.quiz);
-    return topicData.quiz;
+    // Merge any extra questions for this topic from QUESTION_BANK without duplicating
+    const bankExtras = QUESTION_BANK.filter(
+      (q) =>
+        q.topicId === topicId &&
+        !topicData.quiz.some((tq) => tq.question.trim() === q.question.trim())
+    );
+    const combined = [...topicData.quiz, ...bankExtras];
+
+    // Order questions so items matching the chosen difficulty appear first while preserving variety
+    const ordered = [...combined].sort((a, b) => {
+      const aMatch = a.difficulty === difficulty ? 0 : 1;
+      const bMatch = b.difficulty === difficulty ? 0 : 1;
+      return aMatch - bMatch;
+    });
+
+    const selected = ordered.slice(0, Math.min(10, ordered.length));
+    saveToCache('quiz', gradeId, topicId, difficulty, selected);
+    return selected;
+  }
+
+  const cached = loadFromCache<QuizQuestion[]>('quiz', gradeId, topicId, difficulty);
+  if (cached && cached.length > 0) {
+    return cached;
   }
 
   // Check matching questions from question bank

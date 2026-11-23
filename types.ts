@@ -76,6 +76,7 @@ export interface StudiedTopicRecord {
   category: TopicCategory;
   difficulty: Difficulty;
   lastStudiedAt: number;
+  timeSpentSeconds?: number;
 }
 
 export type QuizModeType = 'topic' | 'custom_practice' | 'custom_exam';
